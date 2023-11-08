@@ -1,95 +1,61 @@
-from __future__ import annotations
-
-from typing import Iterator
+from typing import Union
 
 import numpy as np
-from skimage.measure import label
-
-from datasets.arc import TaskData, TaskLayout
-
-BG = 0
+from pydantic import BaseModel
 
 
-def extract_lines(x: np.ndarray) -> list[dict]:
-    colors = set(np.unique(x)) - {BG}
-    lines = []
-    for color in colors:
-        # hlines
-        for i in range(x.shape[0]):
-            line = (x[i, :] == color).astype(np.uint8)
-            labeledl, ncomps = label(line, return_num=True, background=BG)
-            if ncomps > 0:
-                for comp in range(1, ncomps + 1):
-                    _ys, *_ = np.where(label(labeledl) == comp)
-                    if len(_ys) == 1:
-                        continue
-                    lines.append(
-                        {"color": color, "pos": (i, _ys[0]), "shape": (1, len(_ys))}
-                    )
-        # vlines
-        for i in range(x.shape[1]):
-            line = (x[:, i] == color).astype(np.uint8)
-            labeledl, ncomps = label(line, return_num=True, background=BG)
-            if ncomps > 0:
-                for comp in range(1, ncomps + 1):
-                    _xs, *_ = np.where(label(labeledl) == comp)
-                    if len(_xs) == 1:
-                        continue
-                    lines.append(
-                        {"color": color, "pos": (_xs[0], i), "shape": (len(_xs), 1)}
-                    )
-        # dots
-        for i in range(x.shape[1]):
-            line = (x[:, i] == color).astype(np.uint8)
-            labeledl, ncomps = label(line, return_num=True, background=BG)
-            if ncomps > 0:
-                for comp in range(1, ncomps + 1):
-                    _xs, *_ = np.where(label(labeledl) == comp)
-                    if len(_xs) == 1:
-                        left = np.any(x[_xs[0], i - 1 : i] != color)
-                        right = np.any(x[_xs[0], i + 1 : i + 2] != color)
-                        if left and right:
-                            lines.append(
-                                {
-                                    "color": color,
-                                    "pos": (_xs[0], i),
-                                    "shape": (len(_xs), 1),
-                                }
-                            )
-    return lines
+class BaseRect(BaseModel):
+    x: int
+    y: int
+    width: int
+    height: int
+
+    def name(self) -> str:
+        return self.__class__.__name__.lower()
 
 
-class Decomposer(TaskLayout):
-    def __init__(self, task: TaskData) -> None:
-        self._task = task
-        self._result = []
+class RectPrimitive(BaseRect):
+    color: int
 
-    def decompose(self) -> None:
-        comps = []
-        for x, y in self._task.train_xy:
-            e = {
-                "x": {"shape": x.shape, "lines": extract_lines(x)},
-                "y": {"shape": y.shape, "lines": extract_lines(y)},
-            }
-            comps.append(e)
-        self._result = comps
+    def convert2region(self) -> "Region":
+        return Region(
+            x=self.x,
+            y=self.y,
+            width=self.width,
+            height=self.height,
+            background=None,
+            childs=[self],
+        )
 
-    @property
-    def train_x(self) -> list:
-        return [r["x"]["lines"] for r in self._result]
+    def can_split_to_shape(self, width: int, height: int) -> bool:
+        return self.height % height == 0 and self.width % width == 0
 
-    @property
-    def train_y(self) -> list:
-        return [r["y"]["lines"] for r in self._result]
+    def convert_to_shape(self, width: int, height: int) -> list["RectPrimitive"]:
+        if not self.can_split_to_shape(width, height):
+            raise NotImplementedError()
+        xruns = self.height // height
+        yruns = self.width // width
+        blocks = []
 
-    @property
-    def train_xy(self) -> Iterator[tuple]:
-        return zip(self.train_x, self.train_y)
+        for i in range(xruns):
+            for j in range(yruns):
+                x = self.x + i * height
+                y = self.y + j * width
+                p = RectPrimitive(
+                    x=x, y=y, width=width, height=height, color=self.color
+                )
+                blocks.append(p)
+        return blocks
 
-    @property
-    def test_x(self) -> list:
-        return []
 
-    @property
-    def test_y(self) -> list | None:
-        return []
+class Region(BaseRect):
+    background: int | None
+    childs: list[Union["Region", RectPrimitive]]
+
+    def to_numpy(self) -> np.ndarray:
+        a = np.full(fill_value=(self.background or -1), shape=(self.height, self.width))
+        for c in self.childs:
+            if not isinstance(c, RectPrimitive):
+                raise NotImplementedError()
+            a[c.x : c.x + c.height, c.y : c.y + c.width] = c.color
+        return a

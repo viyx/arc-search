@@ -34,7 +34,7 @@ class TaskLayout(ABC):
         ...
 
 
-class TaskData(TaskLayout):
+class RawTaskData(TaskLayout):
     def __init__(
         self,
         train_x: np.ndarray,
@@ -58,13 +58,6 @@ class TaskData(TaskLayout):
     @property
     def train_xy(self) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         return zip(self._train_x, self.train_y)
-
-    # @property
-    # def train_xy_onehot(self) -> Iterator[tuple[np.ndarray, np.ndarray]]:
-    #     max_category = 10
-    #     e = np.eye(max_category, dtype=bool)
-    #     for x, y in self.train_xy:
-    #         yield e[x], e[y]
 
     @property
     def test_x(self) -> list[np.ndarray]:
@@ -91,16 +84,17 @@ class ARCDataset:
     def __len__(self) -> int:
         return len(self._task_files)
 
-    def __getitem__(self, idx: int) -> TaskData:
-        assert idx < len(self), "Index out of range"
+    def __getitem__(self, idx: int) -> RawTaskData:
+        if idx >= len(self):
+            raise IndexError("Index out of range.")
 
         filename = self._task_files[idx]
         with open(filename, encoding="utf-8") as raw:
             data = json.load(raw)
-            train_x = [np.array(d["input"], np.uint8) for d in data["train"]]
-            train_y = [np.array(d["output"], np.uint8) for d in data["train"]]
-            test_x = [np.array(d["input"], np.uint8) for d in data["test"]]
+            train_x = [np.array(d["input"]) for d in data["train"]]
+            train_y = [np.array(d["output"]) for d in data["train"]]
+            test_x = [np.array(d["input"]) for d in data["test"]]
             test_y = None
-            if self._on_submition:
-                test_y = [np.array(d["output"], np.uint8) for d in data["test"]]
-            return TaskData(train_x, train_y, test_x, test_y)
+            if not self._on_submition:
+                test_y = [np.array(d["output"]) for d in data["test"]]
+            return RawTaskData(train_x, train_y, test_x, test_y)

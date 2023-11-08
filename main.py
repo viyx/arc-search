@@ -1,28 +1,33 @@
+import argparse
 import glob
 
-from tqdm import tqdm
+import numpy as np
 
 from datasets.arc import ARCDataset
-from decompose.primitives import Decomposer
-from discovery.linear import LinearAnalyzer
+from search.starter import TaskSearch
 
 if __name__ == "__main__":
-    tasks = glob.glob("./data/arc/*/*")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-f", "--files", default="./data/arc/*/*")
+    args = parser.parse_args()
+
+    tasks = glob.glob(args.files)
     ds = ARCDataset(tasks)
+    fails = 0
+    succ = 0
 
-    results = []
-    valid = []
-
-    for i, name in tqdm(enumerate(tasks)):
-        d = Decomposer(ds[i])
-        d.decompose()
+    for i, name in enumerate(tasks):
         try:
-            has_dep, sol = LinearAnalyzer.has_obj_count_dep(d.train_x, d.train_y)
-            results.append(has_dep)
-            if has_dep:
-                valid.append(name)
-        except Exception:
-            results.append(False)
-
-    print(sum(results))
-    # print(valid)
+            ts = TaskSearch(ds[i])
+            ts.search_topdown()
+            results = ts.test()
+            if results is not None:
+                for y, pred in zip(ds[i].test_y, results):
+                    s = np.all(y == pred)
+                    succ += s
+                    # print("result", np.all(y == pred))
+        except NotImplementedError:
+            fails += 1
+        except BaseException:
+            fails += 1
+    print(succ, fails)

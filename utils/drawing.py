@@ -5,7 +5,7 @@ import numpy as np
 from matplotlib import colors
 from matplotlib.axes import Axes
 
-from datasets.arc import TaskData
+from datasets.arc import RawTaskData
 
 CMAP = [
     "black",
@@ -47,7 +47,7 @@ def plot_array(axes: Axes, data: np.ndarray, title: str) -> None:
     axes.set_title(title)
 
 
-def plot_task(task: TaskData, predictions: np.ndarray | None = None) -> None:
+def plot_task(task: RawTaskData, predictions: np.ndarray | None = None) -> None:
     train_x, train_y, test_x, test_y = (
         task.train_x,
         task.train_y,
