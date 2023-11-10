@@ -1,10 +1,7 @@
 from collections import Counter
 
-import numpy as np
-
 from datasets.arc import RawTaskData
-from decompose.primitives import RectPrimitive, Region
-from decompose.segment import extract_topdown
+from decompose.segment import extract_region_simple
 
 
 def find_mapping(x: list[int], y: list[int]) -> dict | None:
@@ -41,9 +38,9 @@ def xy_lgg(x: list, y: list) -> dict:
     return expr
 
 
-def x_lgg_bm(x: list[RectPrimitive]) -> dict:
-    if not all(map(lambda _x: isinstance(_x, RectPrimitive), x)):
-        raise NotImplementedError()
+def x_lgg_bm(x: list) -> dict:
+    # if not all(map(lambda _x: isinstance(_x, RectPrimitive), x)):
+    # raise NotImplementedError()
 
     expr = {}
     zero = dict(x[0])  # convert BaseModel to dict
@@ -62,7 +59,7 @@ def x_lgg(x: list[dict]) -> dict:
     return expr
 
 
-def x_lgg_bm_childs(x: list[list[RectPrimitive]]) -> list[dict]:
+def x_lgg_bm_childs(x: list[list]) -> list[dict]:
     exprs = []
     for _x in x:
         expr = x_lgg_bm(_x)
@@ -70,20 +67,20 @@ def x_lgg_bm_childs(x: list[list[RectPrimitive]]) -> list[dict]:
     return exprs
 
 
-def refine_types(x: list[Region | RectPrimitive]):
-    xs = x
-    tc = Counter(map(type, x))
-    if len(tc.keys()) > 1:
-        xs = []
-        for _x in x:
-            if isinstance(_x, RectPrimitive):
-                xs.append(_x.convert2region())
-                continue
-            xs.append(_x)
-    return xs
+# def refine_types(x: list[Region]):
+#     xs = x
+#     tc = Counter(map(type, x))
+#     if len(tc.keys()) > 1:
+#         xs = []
+#         for _x in x:
+#             if isinstance(_x, RectPrimitive):
+#                 xs.append(_x.convert2region())
+#                 continue
+#             xs.append(_x)
+#     return xs
 
 
-def refine_childs_shape(x: list[list[RectPrimitive]]):
+def refine_childs_shape(x: list[list]):
     lens = list(map(len, x))
     xs = x
     if 1 in lens:  # can convert one big prim to small ones
@@ -123,29 +120,23 @@ class TaskSearch:
         self.steps = []
 
     def search_topdown(self) -> None:
-        xs = [extract_topdown(x) for x in self.task.train_x]
-        ys = [extract_topdown(x) for x in self.task.train_y]
+        xs = [extract_region_simple(x) for x in self.task.train_x]
+        ys = [extract_region_simple(x) for x in self.task.train_y]
+        # self._make_step_childs(xs, ys)
+        print(xs, ys)
 
-        xs, ys = self._make_step(xs, ys)
+    # def _make_step(self, x, y) -> tuple:
+    # x = refine_types(x)
+    # y = refine_types(y)
 
-        if all(map(lambda _y: "childs" in _y.model_dump(), ys)):
-            xs = list(map(lambda _x: _x.childs, xs))
-            ys = list(map(lambda _y: _y.childs, ys))
-            self._make_step_childs(xs, ys)
-        print(self.success)
-
-    def _make_step(self, x, y) -> tuple:
-        x = refine_types(x)
-        y = refine_types(y)
-
-        lgg = xy_lgg(x, y)
-        for k, v in lgg.items():
-            if v == "VAR" and k != "childs":
-                raise NotImplementedError()
-        lgg["class"] = y[0].name()
-        self.steps.append(lgg)
-        print()
-        return x, y
+    # lgg = xy_lgg(x, y)
+    # for k, v in lgg.items():
+    #     if v == "VAR" and k != "childs":
+    #         raise NotImplementedError()
+    # lgg["class"] = y[0].name()
+    # self.steps.append(lgg)
+    # print()
+    # return x, y
 
     def _make_step_childs(self, x, y):
         x = refine_childs_shape(x)
@@ -172,42 +163,42 @@ class TaskSearch:
                     self.steps.append(lgg)
                     break
 
-    def test(self) -> list[np.ndarray] | None:
-        if not self.success:
-            return None
+    # def test(self) -> list[np.ndarray] | None:
+    #     if not self.success:
+    #         return None
 
-        xs = [extract_topdown(x) for x in self.task.test_x]
-        if len(xs) > 1:
-            raise NotImplementedError()
+    #     xs = [extract_topdown(x) for x in self.task.test_x]
+    #     if len(xs) > 1:
+    #         raise NotImplementedError()
 
-        def mapper(src: dict, step: dict, attrs: list) -> dict:
-            data = {}
-            for attr in attrs:
-                target = step[attr]
-                if target == "FROMX":
-                    data[attr] = getattr(src, attr)
-                elif isinstance(target, tuple):
-                    m1, m2 = target
-                    data[attr] = m2[getattr(src, m1)]
-                else:
-                    data[attr] = target
-            return data
+    #     def mapper(src: dict, step: dict, attrs: list) -> dict:
+    #         data = {}
+    #         for attr in attrs:
+    #             target = step[attr]
+    #             if target == "FROMX":
+    #                 data[attr] = getattr(src, attr)
+    #             elif isinstance(target, tuple):
+    #                 m1, m2 = target
+    #                 data[attr] = m2[getattr(src, m1)]
+    #             else:
+    #                 data[attr] = target
+    #         return data
 
-        results = []
-        for x in xs:
-            step_one = self.steps[0]
-            if self.steps[0]["class"] == "region":
-                attrs = ["x", "y", "width", "height", "background"]
-                reg_data = mapper(x, step_one, attrs)
-                if step_one["childs"] == "VAR":
-                    step_two = self.steps[1]
-                    childs = []
-                    for c in x.childs:
-                        if step_two["class"] != "rectprimitive":
-                            raise NotImplementedError()
-                        attrs = ["x", "y", "width", "height", "color"]
-                        childs.append(RectPrimitive(**mapper(c, step_two, attrs)))
-                    reg_data["childs"] = childs
-                res = Region(**reg_data)
-            results.append(res.to_numpy())
-        return results
+    #     results = []
+    #     for x in xs:
+    #         step_one = self.steps[0]
+    #         if self.steps[0]["class"] == "region":
+    #             attrs = ["x", "y", "width", "height", "background"]
+    #             reg_data = mapper(x, step_one, attrs)
+    #             if step_one["childs"] == "VAR":
+    #                 step_two = self.steps[1]
+    #                 childs = []
+    #                 for c in x.childs:
+    #                     if step_two["class"] != "rectprimitive":
+    #                         raise NotImplementedError()
+    #                     attrs = ["x", "y", "width", "height", "color"]
+    #                     childs.append(RectPrimitive(**mapper(c, step_two, attrs)))
+    #                 reg_data["childs"] = childs
+    #             res = Region(**reg_data)
+    #         results.append(res.to_numpy())
+    #     return results
