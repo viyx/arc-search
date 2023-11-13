@@ -3,7 +3,7 @@ import typing
 from toponetx.classes import CombinatorialComplex as CCC
 
 from datasets.arc import RawTaskData
-from decompose.segment import make_bitmaps
+from decompose.segment import make_topology
 
 
 def find_mapping(x: list[int], y: list[int]) -> dict | None:
@@ -39,7 +39,7 @@ def _substitution(data: list[dict]) -> dict:
     return s
 
 
-def lgg(cells: list[CCC], rank: int):
+def lggs(cells: list[CCC], rank: int) -> list[dict]:
     subs = []
     for ccc in cells:
         hedges = _get_rank_edges(ccc, rank)
@@ -49,8 +49,9 @@ def lgg(cells: list[CCC], rank: int):
         if sub == {}:
             return None
         subs.append(sub)
-    sub_pairwise = [_substitution([subs[0], subs[i]]) for i in range(1, len(subs))]
-    return sub_pairwise
+    return subs
+    # sub_pairwise = [_substitution([subs[0], subs[i]]) for i in range(1, len(subs))]
+    # return sub_pairwise
 
 
 class TaskSearch:
@@ -60,14 +61,17 @@ class TaskSearch:
         self.steps = []
 
     def search_topdown(self) -> None:
-        xs = [make_bitmaps(x) for x in self.task.train_x]
-        ys = [make_bitmaps(x) for x in self.task.train_y]
+        xs = [make_topology(x) for x in self.task.train_x]
+        ys = [make_topology(x) for x in self.task.train_y]
 
         for ry in ys[0].ranks[::-1]:
-            ylgg = lgg(ys, ry)
-            if ylgg is not None:
+            ylggs = lggs(ys, ry)
+            if ylggs is not None:
                 for rx in xs[0].ranks[::-1]:
-                    xlgg = lgg(xs, rx)
-                    if xlgg is not None:
-                        print()
+                    xlggs = lggs(xs, rx)
+                    if xlggs is not None:
+                        self.make_greedy_step()
         print()
+
+    def make_greedy_step(self):
+        pass

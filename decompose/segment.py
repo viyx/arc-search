@@ -32,26 +32,30 @@ def make_primitives(data: np.ndarray, x, y, bitmap: np.ndarray, rank: int, ccc: 
 
     for i in range(1, ncomps + 1):
         xs, ys = np.where(comps == i)
-        if len(xs) == 1:
-            continue
         colors = data[xs, ys]
         vertices = list(zip(xs, ys))
         ch = (
-            uc[0]
-            if len(uc := np.unique(colors)) == 1
+            ucolors[0]
+            if len(ucolors := np.unique(colors)) == 1
             else colored_shape_hash(xs, ys, colors)
         )
         sh = shape_bitmap(xs, ys)
         bh = shape_hash(xs, ys)
         ccc.add_cell(
-            vertices, rank=rank, x=xs[0], y=ys[0], color=ch, bitmap=sh, bitmap_hash=bh
+            vertices + [bh, ch],
+            rank=rank,
+            x=xs[0],
+            y=ys[0],
+            color=ch,
+            bitmap=sh,
+            bitmap_hash=bh,
         )
 
 
-def make_bitmaps(data: np.ndarray) -> CCC:
+def make_topology(data: np.ndarray) -> CCC:
     ccc = CCC()
     max_rank = 100
-    xs, ys = np.indices(data.shape).reshape(2, -1)
+    # xs, ys = np.indices(data.shape).reshape(2, -1)
 
     # zero rank vertices
     # for _x, _y in zip(xs, ys):
@@ -72,13 +76,16 @@ def make_bitmaps(data: np.ndarray) -> CCC:
     )
     for i in range(1, nbinary_comps + 1):
         xs, ys = np.where(binary_comps == i)
-        if len(xs) == 1:
-            continue
         vertices = list(zip(xs, ys))
         sh = shape_bitmap(xs, ys)
         bh = shape_hash(xs, ys)
         ccc.add_cell(
-            vertices, rank=max_rank - 1, x=xs[0], y=ys[0], bitmap=sh, bitmap_hash=bh
+            vertices + [bh],
+            rank=max_rank - 1,
+            x=xs[0],
+            y=ys[0],
+            bitmap=sh,
+            bitmap_hash=bh,
         )
         make_primitives(data, xs[0], ys[0], sh, max_rank - 2, ccc)
     return ccc
