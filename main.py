@@ -1,8 +1,6 @@
 import argparse
 import glob
 
-import numpy as np
-
 from datasets.arc import ARCDataset
 from search.starter import TaskSearch
 
@@ -17,17 +15,17 @@ if __name__ == "__main__":
     succ = 0
 
     for i, name in enumerate(tasks):
-        try:
-            ts = TaskSearch(ds[i])
-            ts.search_topdown()
-            results = ts.test()
-            if results is not None:
-                for y, pred in zip(ds[i].test_y, results):
-                    s = np.all(y == pred)
-                    succ += s
-                    # print("result", np.all(y == pred))
-        except NotImplementedError:
-            fails += 1
-        except BaseException:
-            fails += 1
+        # try:
+        ts = TaskSearch(ds[i])
+        ts.search_topdown()
+        # results = ts.test()
+        # if results is not None:
+        #     for y, pred in zip(ds[i].test_y, results):
+        #         s = np.all(y == pred)
+        #         succ += s
+        # print("result", np.all(y == pred))
+        # except NotImplementedError:
+        #     fails += 1
+        # except BaseException:
+        #     fails += 1
     print(succ, fails)
