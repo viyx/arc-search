@@ -17,17 +17,24 @@ if __name__ == "__main__":
     succ = 0
 
     for i, name in enumerate(tasks):
-        # try:
         ts = TaskSearch(ds[i])
         ts.search_topdown()
         results = ts.test()
-        if results is not None:
-            for y, pred in zip(ds[i].test_y, results):
-                s = np.all(y == pred)
-                succ += s
-                # print("result", np.all(y == pred))
-        # except NotImplementedError:
-        #     fails += 1
-        # except BaseException:
-        #     fails += 1
-    print(succ, fails)
+        for y, pred in zip(ds[i].test_y, results):
+            s = np.all(y == pred)
+            succ += s
+            print("result", np.all(y == pred))
+    #     try:
+    #         ts = TaskSearch(ds[i])
+    #         ts.search_topdown()
+    #         results = ts.test()
+    #         for y, pred in zip(ds[i].test_y, results):
+    #             s = np.all(y == pred)
+    #             succ += s
+    #             print("result", np.all(y == pred))
+    #     except NotImplementedError as e:
+    #         print(e)
+    #         fails += 1
+    #     except BaseException:
+    #         fails += 1
+    # print(succ, fails)

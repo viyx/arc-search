@@ -1,62 +1,94 @@
+from copy import deepcopy
+
 import numpy as np
 from pydantic import BaseModel
-
-# class BaseRect(BaseModel):
-#     x: int
-#     y: int
-#     width: int
-#     height: int
-
-#     def name(self) -> str:
-#         return self.__class__.__name__.lower()
-
-
-# class RectPrimitive(BaseRect):
-#     color: int
-
-#     def convert2region(self) -> "Region":
-#         return Region(
-#             x=self.x,
-#             y=self.y,
-#             width=self.width,
-#             height=self.height,
-#             background=None,
-#             childs=[self],
-#         )
-
-#     def can_split_to_shape(self, width: int, height: int) -> bool:
-#         return self.height % height == 0 and self.width % width == 0
-
-#     def convert_to_shape(self, width: int, height: int) -> list["RectPrimitive"]:
-#         if not self.can_split_to_shape(width, height):
-#             raise NotImplementedError()
-#         xruns = self.height // height
-#         yruns = self.width // width
-#         blocks = []
-
-#         for i in range(xruns):
-#             for j in range(yruns):
-#                 x = self.x + i * height
-#                 y = self.y + j * width
-#                 p = RectPrimitive(
-#                     x=x, y=y, width=width, height=height, color=self.color
-#                 )
-#                 blocks.append(p)
-#         return blocks
+from scipy import signal
 
 
 class Region(BaseModel):
-    # model_config = ConfigDict(arbitrary_types_allowed=True)
     x: int
     y: int
-    width: int
-    height: int
-    background: int | None
+    background: str
+    shape: str
     childs: list["Region"]
 
-    def to_numpy(self) -> np.ndarray:
-        raise NotImplementedError()
-        a = np.full(fill_value=(self.background or -1), shape=(self.height, self.width))
-        for c in self.childs:
-            a[c.x : c.x + c.height, c.y : c.y + c.width] = c.color
-        return a
+    def childs_hash(self) -> str:
+        return str(hash(str([hash(c) for c in self.childs])))
+
+    def __hash__(self) -> int:
+        return hash(
+            str([self.x, self.y, self.shape, self.background, self.childs_hash()])
+        )
+
+    def max_level(self) -> int:
+        def _max_level(regs: list["Region"], lvl=0) -> int:
+            if len(regs) == 0:
+                return lvl
+            cnts = []
+            for r in regs:
+                cnts.append(_max_level(r.childs, lvl + 1))
+            return max(cnts)
+
+        return _max_level([self])
+
+    def get_level_data(self, level: int) -> list["Region"] | None:
+        def _get_level_data(data: list["Region"], lvl: int):
+            if lvl == 0:
+                return data
+            _data = []
+            for reg in data:
+                _data.extend(_get_level_data(reg.childs, lvl - 1))
+            return _data
+
+        return _get_level_data([self], level)
+
+    def convert_shape(self, lgg: dict, hashes: dict):
+        # only shape convert
+        target = deepcopy(hashes[lgg["shape"]])
+        src = deepcopy(hashes[self.shape])
+
+        if src.size > target.size:
+            conv = signal.convolve(target, src, mode="valid")
+            area = np.sum(target == 1)
+            result = []
+            for x, y in zip(*np.where(conv == area)):
+                src[x : x + target.shape[0], y : y + target.shape[1]] = -1
+                if len(self.background) == 1:
+                    _bg_hash = self.background
+                else:
+                    _bg_data = hashes[self.background][
+                        x : x + target.shape[0], y : y + target.shape[1]
+                    ]
+                    _bg_hash = str(hash(str(_bg_data)))
+                    hashes[_bg_hash] = _bg_data
+                result.append(
+                    Region(
+                        x=self.x + x,
+                        y=self.y + y,
+                        background=_bg_hash,
+                        shape=lgg["shape"],
+                        childs=[],
+                    )
+                )
+            if np.all(src == -1):
+                return result
+        return [self]
+
+    def render(self, hashes) -> np.ndarray:
+        def make_bg(shape, hashes, bg):
+            if 0 <= int(bg) < 10:
+                r = np.full(hashes[shape].shape, int(bg))
+            else:
+                r = hashes[bg]
+            return r
+
+        reg_main = make_bg(self.shape, hashes, self.background)
+
+        for ch in self.childs:
+            data_ch = make_bg(ch.shape, hashes, ch.background)
+            if np.any(data_ch == -1):
+                raise NotImplementedError("-1 in BG.")
+            reg_main[
+                ch.x : ch.x + data_ch.shape[0], ch.y : ch.y + data_ch.shape[1]
+            ] = data_ch
+        return reg_main
