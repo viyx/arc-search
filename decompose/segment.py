@@ -1,4 +1,7 @@
+from copy import deepcopy
+
 import numpy as np
+from scipy import signal
 from skimage.measure import label
 
 from decompose.primitives import Region
@@ -8,6 +11,12 @@ from decompose.primitives import Region
 #     if len(bc) > 1 and bc[0] == bc[1]:
 #         return None
 #     return np.argmax(bc)
+
+
+def childs_hash(childs, outdict):
+    h = str(hash(str([hash(c) for c in childs])))
+    outdict[h] = childs
+    return h
 
 
 def _shape_bitmap(xs, ys):
@@ -49,6 +58,7 @@ def extract_primitives(data: np.ndarray, outdict: dict) -> list[Region]:
             shape=str(shape_hash(xs, ys, outdict)),
             background=str(data[xs, ys][0]),
             childs=[],
+            childs_hash=childs_hash([], outdict),
             x=min(xs),
             y=min(ys),
         )
@@ -56,7 +66,7 @@ def extract_primitives(data: np.ndarray, outdict: dict) -> list[Region]:
     return prims
 
 
-def extract_region_simple(raw: np.ndarray, outdict: dict) -> Region:
+def extract_hierarchy(raw: np.ndarray, outdict: dict) -> Region:
     bg = 0
     binary_view = raw != bg
     binary_comps, ncomps = label(
@@ -67,17 +77,17 @@ def extract_region_simple(raw: np.ndarray, outdict: dict) -> Region:
         xs, ys = np.where(binary_comps == i)
         one_colored = len(np.unique(raw[xs, ys].ravel())) == 1
 
-        childs_2 = []
-        if not one_colored:
-            bm = _shape_bitmap(xs, ys)
-            bm[xs, ys] = raw[xs, ys]
-            childs_2 = extract_primitives(bm, outdict)
+        bm = _shape_bitmap(xs, ys)
+        _xs, _ys = np.where(bm == 1)
+        bm[_xs, _ys] = raw[xs, ys]
+        childs_2 = extract_primitives(bm, outdict)
         child = Region(
             shape=str(shape_hash(xs, ys, outdict)),
             background=str(raw[xs, ys][0])
             if one_colored
             else str(colored_shape_hash(xs, ys, raw[xs, ys].ravel(), outdict)),
             childs=childs_2,
+            childs_hash=childs_hash(childs_2, outdict),
             x=min(xs),
             y=min(ys),
         )
@@ -88,6 +98,45 @@ def extract_region_simple(raw: np.ndarray, outdict: dict) -> Region:
         shape=str(shape_hash(xs, ys, outdict)),
         background=str(bg),
         childs=childs_1,
+        childs_hash=childs_hash(childs_1, outdict),
         x=0,
         y=0,
     )
+
+
+def try_split2shape(
+    src: Region, shape: str, hashes: dict, result: list["Region"]
+) -> bool:
+    target_shape = deepcopy(hashes[shape])
+    src_shape = deepcopy(hashes[src.shape])
+
+    if src_shape.size > target_shape.size:
+        conv = signal.convolve(target_shape, src_shape, mode="valid")
+        area = np.sum(target_shape == 1)
+        _result = []
+        for x, y in zip(*np.where(conv == area)):
+            src_shape[x : x + target_shape.shape[0], y : y + target_shape.shape[1]] = -1
+            if len(src.background) == 1:
+                _bg_hash = src.background
+                childs = []
+            else:
+                _bg_data = hashes[src.background][
+                    x : x + target_shape.shape[0], y : y + target_shape.shape[1]
+                ]
+                _bg_hash = str(hash(str(_bg_data)))
+                hashes[_bg_hash] = _bg_data
+                childs = extract_primitives(_bg_data, hashes)
+            _result.append(
+                Region(
+                    x=src.x + x,
+                    y=src.y + y,
+                    background=_bg_hash,
+                    shape=shape,
+                    childs=childs,
+                    childs_hash=childs_hash(childs, hashes),
+                )
+            )
+        if np.all(src_shape == -1):
+            result.extend(_result)
+            return True
+    return False

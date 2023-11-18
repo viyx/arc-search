@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 
 from datasets.arc import RawTaskData
 from decompose.primitives import Region
-from decompose.segment import extract_region_simple
+from decompose.segment import extract_hierarchy, try_split2shape
 
 
 def try_linear_mapping(x: list[int], y: list[int]) -> object | None:
@@ -44,14 +44,15 @@ def lgg(data: list[list[Region]]) -> list[dict]:
     return subs
 
 
-def _adjust(data: list[Region], to: dict, hashes: dict) -> list[Region]:
+def _convert2shape(data: list[Region], to: dict, hashes: dict) -> list[Region]:
     result = []
-    for i, r in enumerate(data):
+    for r in data:
         _r = [r]
         for k, v in to.items():
-            if v != "VAR":
-                if getattr(r, k) != v and k == "shape":
-                    _r = r.convert_shape(to, hashes)
+            if v != "VAR" and k == "shape" and getattr(r, k) != v:
+                splitted = []
+                if try_split2shape(r, to["shape"], hashes, splitted):
+                    _r = splitted
                     break
         result.extend(_r)
     return result
@@ -77,23 +78,18 @@ class TaskSearch:
         return attrs
 
     def search_topdown(self) -> None:
-        xs = [extract_region_simple(x, self.hashes) for x in self.task.train_x]
-        ys = [extract_region_simple(x, self.hashes) for x in self.task.train_y]
+        xs = [extract_hierarchy(x, self.hashes) for x in self.task.train_x]
+        ys = [extract_hierarchy(x, self.hashes) for x in self.task.train_y]
 
         max_ylevel = max(y.max_level() for y in ys)
         max_xlevel = max(x.max_level() for x in xs)
         for ylevel in range(max_ylevel):
             ylevel_data = [_y.get_level_data(ylevel) for _y in ys]
-            level_succeed = False
             for xlevel in range(max_xlevel):
                 xlevel_data = [_x.get_level_data(xlevel) for _x in xs]
                 if self.step(ylevel_data, xlevel_data, ylevel, xlevel):
-                    level_succeed = True
-                    break
-            if not level_succeed:
-                print()
-                # return
-        self.success = True
+                    self.success = True
+                    return
 
     def step(self, ydata, xdata, ylevel, xlevel):
         step = {}
@@ -129,13 +125,14 @@ class TaskSearch:
             etalon = lggs[mi]
             for i, c in enumerate(var_cnts):
                 if c > m:
-                    data[i] = _adjust(data[i], etalon, self.hashes)
+                    if etalon["shape"] != "VAR" and lggs[i]["shape"] == "VAR":
+                        data[i] = _convert2shape(data[i], etalon, self.hashes)
         return data
 
     def test(self) -> list[np.ndarray] | None:
         results = []
         for x in self.task.test_x:
-            xregs = extract_region_simple(x, self.hashes)
+            xregs = extract_hierarchy(x, self.hashes)
 
             data1 = self.create_level(xregs.get_level_data(1), self.steps[1])
             regs1 = [Region(**d, childs=[]) for d in data1]

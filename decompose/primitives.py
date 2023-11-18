@@ -1,8 +1,5 @@
-from copy import deepcopy
-
 import numpy as np
 from pydantic import BaseModel
-from scipy import signal
 
 
 class Region(BaseModel):
@@ -10,14 +7,16 @@ class Region(BaseModel):
     y: int
     background: str
     shape: str
+    childs_hash: str
     childs: list["Region"]
 
-    def childs_hash(self) -> str:
-        return str(hash(str([hash(c) for c in self.childs])))
+    # @computed_field
+    # def childs_hash(self) -> str:
+    #     return str(hash(str([hash(c) for c in self.childs])))
 
     def __hash__(self) -> int:
         return hash(
-            str([self.x, self.y, self.shape, self.background, self.childs_hash()])
+            str([self.x, self.y, self.shape, self.background, self.childs_hash])
         )
 
     def max_level(self) -> int:
@@ -32,6 +31,9 @@ class Region(BaseModel):
         return _max_level([self])
 
     def get_level_data(self, level: int) -> list["Region"] | None:
+        if level > self.max_level():
+            raise ValueError("Exceed maximum level.")
+
         def _get_level_data(data: list["Region"], lvl: int):
             if lvl == 0:
                 return data
@@ -41,38 +43,6 @@ class Region(BaseModel):
             return _data
 
         return _get_level_data([self], level)
-
-    def convert_shape(self, lgg: dict, hashes: dict):
-        # only shape convert
-        target = deepcopy(hashes[lgg["shape"]])
-        src = deepcopy(hashes[self.shape])
-
-        if src.size > target.size:
-            conv = signal.convolve(target, src, mode="valid")
-            area = np.sum(target == 1)
-            result = []
-            for x, y in zip(*np.where(conv == area)):
-                src[x : x + target.shape[0], y : y + target.shape[1]] = -1
-                if len(self.background) == 1:
-                    _bg_hash = self.background
-                else:
-                    _bg_data = hashes[self.background][
-                        x : x + target.shape[0], y : y + target.shape[1]
-                    ]
-                    _bg_hash = str(hash(str(_bg_data)))
-                    hashes[_bg_hash] = _bg_data
-                result.append(
-                    Region(
-                        x=self.x + x,
-                        y=self.y + y,
-                        background=_bg_hash,
-                        shape=lgg["shape"],
-                        childs=[],
-                    )
-                )
-            if np.all(src == -1):
-                return result
-        return [self]
 
     def render(self, hashes) -> np.ndarray:
         def make_bg(shape, hashes, bg):
