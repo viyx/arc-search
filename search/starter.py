@@ -6,7 +6,7 @@ from sklearn.linear_model import LinearRegression
 
 from datasets.arc import RawTaskData
 from decompose.primitives import Region
-from decompose.segment import extract_hierarchy, try_split2shape
+from decompose.segment import childs_hash, extract_hierarchy, try_split2shape
 
 
 def try_linear_mapping(x: list[int], y: list[int]) -> object | None:
@@ -131,13 +131,29 @@ class TaskSearch:
 
     def test(self) -> list[np.ndarray] | None:
         results = []
-        for x in self.task.test_x:
-            xregs = extract_hierarchy(x, self.hashes)
 
-            data1 = self.create_level(xregs.get_level_data(1), self.steps[1])
-            regs1 = [Region(**d, childs=[]) for d in data1]
-            data0 = self.create_level(xregs.get_level_data(0), self.steps[0])
-            res = Region(**data0[0], childs=regs1)
+        def _test(self, x: Region, lvl: int):
+            if lvl > x.max_level() or lvl > max(self.steps):
+                raise ValueError("Level exceed maximum.")
+
+            lvl_data = self.create_level(x.get_level_data(lvl), self.steps[lvl])
+            if lvl == 0:
+                return [
+                    Region(**d, childs=[], childs_hash=childs_hash([], self.hashes))
+                    for d in lvl_data
+                ]
+            childs = _test(self, x, lvl + 1)
+            # ch = childs_hash(childs, self.hashes)
+            return [Region(**d, childs=childs) for d in lvl_data]
+
+        for x in self.task.test_x:
+            xreg = extract_hierarchy(x, self.hashes)
+
+            # data1 = self.create_level(xregs.get_level_data(1), self.steps[1])
+            # regs1 = [Region(**d, childs=[]) for d in data1]
+            # data0 = self.create_level(xregs.get_level_data(0), self.steps[0])
+            # res = Region(**data0[0], childs=regs1)
+            res = _test(self, xreg, 0)
             results.append(res.render(self.hashes))
         return results
 

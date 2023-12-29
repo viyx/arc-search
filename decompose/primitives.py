@@ -10,10 +10,6 @@ class Region(BaseModel):
     childs_hash: str
     childs: list["Region"]
 
-    # @computed_field
-    # def childs_hash(self) -> str:
-    #     return str(hash(str([hash(c) for c in self.childs])))
-
     def __hash__(self) -> int:
         return hash(
             str([self.x, self.y, self.shape, self.background, self.childs_hash])
@@ -30,7 +26,7 @@ class Region(BaseModel):
 
         return _max_level([self])
 
-    def get_level_data(self, level: int) -> list["Region"] | None:
+    def get_level_data(self, level: int) -> list["Region"]:
         if level > self.max_level():
             raise ValueError("Exceed maximum level.")
 
@@ -39,7 +35,7 @@ class Region(BaseModel):
                 return data
             _data = []
             for reg in data:
-                _data.extend(_get_level_data(reg.childs, lvl - 1))
+                _data.append(_get_level_data(reg.childs, lvl - 1))
             return _data
 
         return _get_level_data([self], level)
