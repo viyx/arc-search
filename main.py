@@ -1,10 +1,8 @@
 import argparse
 import glob
 
-import numpy as np
-
 from datasets.arc import ARCDataset
-from search.starter import TaskSearch
+from search.multisearch import TaskSearch
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -18,12 +16,12 @@ if __name__ == "__main__":
 
     for i, name in enumerate(tasks):
         ts = TaskSearch(ds[i])
-        ts.search_topdown()
-        results = ts.test()
-        for y, pred in zip(ds[i].test_y, results):
-            s = np.all(y == pred)
-            succ += s
-            print("result", np.all(y == pred))
+        ts.search()
+        # results = ts.test()
+        # for y, pred in zip(ds[i].test_y, results):
+        #     s = np.all(y == pred)
+        #     succ += s
+        #     print("result", np.all(y == pred))
     #     try:
     #         ts = TaskSearch(ds[i])
     #         ts.search_topdown()
