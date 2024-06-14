@@ -13,8 +13,6 @@ if __name__ == "__main__":
 
     tasks = glob.glob(args.files)
     ds = ARCDataset(tasks)
-    fails = 0
-    succ = 0
 
     for i, name in enumerate(tasks):
         ts = TaskSearch(ds[i])
@@ -22,7 +20,7 @@ if __name__ == "__main__":
         results = ts.test()
         for y, pred in zip(ds[i].test_y, results):
             s = np.all(y == pred)
-            succ += s
+            # succ += s
             print("result", np.all(y == pred))
     #     try:
     #         ts = TaskSearch(ds[i])

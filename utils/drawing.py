@@ -21,7 +21,7 @@ CMAP = [
 ]
 
 
-def plot_array(axes: Axes, data: np.ndarray, title: str) -> None:
+def plot_array(axes: Axes, data: np.ndarray, title: str = "") -> None:
     cmap = colors.ListedColormap(
         [
             "#000000",
@@ -47,7 +47,7 @@ def plot_array(axes: Axes, data: np.ndarray, title: str) -> None:
     axes.set_title(title)
 
 
-def plot_task(task: RawTaskData, predictions: np.ndarray | None = None) -> None:
+def plot_task_in2rows(task: RawTaskData, predictions: np.ndarray | None = None) -> None:
     train_x, train_y, test_x, test_y = (
         task.train_x,
         task.train_y,
@@ -84,9 +84,17 @@ def plot_task(task: RawTaskData, predictions: np.ndarray | None = None) -> None:
             plt.show()
 
 
-def plot_xy(x: np.ndarray, y: np.ndarray) -> None:
-    _, axs = plt.subplots(2, 1, figsize=(3 * 1, 3 * 2))
-    plot_array(axs[0], x, "input")
-    plot_array(axs[1], y, "output")
+def plot_task_in1row(task: RawTaskData, predictions: np.ndarray | None = None) -> None:
+    if predictions:
+        raise NotImplementedError()
+
+    union_x = task.train_x + task.test_x
+    union_y = task.train_y + task.test_y
+    n_columns = len(union_x)
+    _, axs = plt.subplots(2, n_columns, figsize=(3 * n_columns, 3 * 2))
+    for i in range(n_columns):
+        train_or_test = "train" if i <= (len(task.train_x) - 1) else "test"
+        plot_array(axs[0, i], union_x[i], train_or_test)
+        plot_array(axs[1, i], union_y[i])
     plt.tight_layout()
     plt.show()
