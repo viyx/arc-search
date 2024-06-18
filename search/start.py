@@ -3,7 +3,11 @@ from collections import defaultdict
 import networkx as nx
 
 from datasets.arc import RawTaskData
-from search.graph import add_first_level, add_next_level
+from search.graph import add_first_repr
+
+# from search.inductions import induction
+
+# from search.metrics import pairwise_dists
 
 # def try_linear_mapping(x: list[int], y: list[int]) -> object | None:
 #     if len(x) != len(y):
@@ -65,21 +69,28 @@ class TaskSearch:
         self.success = False
         self.steps = defaultdict(dict)
 
-    def solved(self, ylevel) -> dict:
-        attrs = {}
-        if ylevel in self.steps:
-            for _, xlevel in self.steps[ylevel].items():
-                for k, v in xlevel.items():
-                    attrs[k] = v
-        return attrs
-
     def search_topdown(self) -> None:
         gx, gy = nx.DiGraph(), nx.DiGraph()
-        add_first_level(gx, self.task.train_x)
-        add_first_level(gy, self.task.train_y)
+        gx.add_node("0")
+        gy.add_node("0")
 
-        add_next_level(gx)
-        add_next_level(gy)
+        for p in [-1]:
+            _ = add_first_repr(gx, self.task.train_x, "repr", "0", p, self.task.test_x)
+            _ = add_first_repr(gy, self.task.train_y, "repr", "0", p)
+
+        # new_xs = [xnname]
+        # new_ys = [ynname]
+
+        # calc metrics
+        # x_ = [gx.nodes[n]["lgg"] for n in new_xs]
+        # y_ = [gy.nodes[n]["lgg"] for n in new_ys]
+
+        # # add_induction_node
+        # ind1 = induction(
+        #     gx.nodes["1_p-1"]["data"],
+        #     gy.nodes["1_p-1"]["data"],
+        #     gx.nodes["1_p-1"]["test_data"],
+        # )
 
         pass
 

@@ -4,7 +4,7 @@ import glob
 import numpy as np
 
 from datasets.arc import ARCDataset
-from search.starter import TaskSearch
+from search.start import TaskSearch
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

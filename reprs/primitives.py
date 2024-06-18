@@ -7,11 +7,11 @@ class Region(BaseModel):
     y: int
     width: int
     height: int
-    content_hash: str
-    content: np.ndarray
+    raw: np.ndarray
+    raw_hash: str
 
     def __hash__(self) -> int:
-        return hash(str([self.x, self.y, self.width, self.height, self.content_hash]))
+        return hash(str([self.x, self.y, self.width, self.height, self.raw_hash]))
 
     class Config:
         arbitrary_types_allowed = True
@@ -19,6 +19,7 @@ class Region(BaseModel):
 
 class Bag(BaseModel):
     regions: list[Region]
+    length: int
 
     def __hash__(self) -> int:
         return hash(str([hash(r) for r in self.regions]))

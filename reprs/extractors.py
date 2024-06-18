@@ -61,13 +61,13 @@ def extract_region(data: np.ndarray, outdict: dict, bg: int) -> Region:
     r = Region(
         x=0,
         y=0,
-        content_hash=_flatten_and_hash(data, bg),
+        raw_hash=_flatten_and_hash(data, bg),
         height=data.shape[0],
         width=data.shape[1],
-        content=data,
+        raw=data,
     )
-    if len(r.content_hash) > 1:
-        outdict[r.content_hash] = data
+    if len(r.raw_hash) > 1:
+        outdict[r.raw_hash] = data
     return r
 
 
@@ -81,7 +81,7 @@ def extract_bag(data: np.ndarray, outdict: dict, bg: int) -> Bag:
         regions.append(
             extract_region(data[xmin : xmax + 1, ymin : ymax + 1], outdict, bg)
         )
-    return Bag(regions=regions)
+    return Bag(regions=regions, length=len(regions))
 
 
 # def extract_primitives(data: np.ndarray, outdict: dict) -> list[Region]:
