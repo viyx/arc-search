@@ -4,10 +4,8 @@ import networkx as nx
 
 from datasets.arc import RawTaskData
 from search.graph import add_first_repr
-
-# from search.inductions import induction
-
-# from search.metrics import pairwise_dists
+from search.inductions import induction
+from search.metrics import dict_dist, pairwise_dists
 
 # def try_linear_mapping(x: list[int], y: list[int]) -> object | None:
 #     if len(x) != len(y):
@@ -75,22 +73,27 @@ class TaskSearch:
         gy.add_node("0")
 
         for p in [-1]:
-            _ = add_first_repr(gx, self.task.train_x, "repr", "0", p, self.task.test_x)
-            _ = add_first_repr(gy, self.task.train_y, "repr", "0", p)
-
-        # new_xs = [xnname]
-        # new_ys = [ynname]
+            xnname = add_first_repr(
+                gx, self.task.train_x, "repr", "0", p, self.task.test_x
+            )
+            ynname = add_first_repr(gy, self.task.train_y, "repr", "0", p)
 
         # calc metrics
-        # x_ = [gx.nodes[n]["lgg"] for n in new_xs]
-        # y_ = [gy.nodes[n]["lgg"] for n in new_ys]
+        x_level_lggs = [gx.nodes[n]["level_lgg"] for n in [xnname]]
+        y_level_lggs = [gy.nodes[n]["level_lgg"] for n in [ynname]]
 
-        # # add_induction_node
-        # ind1 = induction(
-        #     gx.nodes["1_p-1"]["data"],
-        #     gy.nodes["1_p-1"]["data"],
-        #     gx.nodes["1_p-1"]["test_data"],
-        # )
+        # select nodes
+
+        _ = pairwise_dists(x_level_lggs, y_level_lggs)
+
+        ind1 = induction(
+            gx.nodes[xnname]["data"],
+            gy.nodes[ynname]["data"],
+            gx.nodes[xnname]["test_data"],
+        )
+
+        perc = dict_dist(gy.nodes[ynname]["level_lgg"], ind1)
+        gy.nodes[ynname]["solution"] = {"x_node": xnname, "maps": ind1, "percent": perc}
 
         pass
 

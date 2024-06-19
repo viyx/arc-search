@@ -17,7 +17,8 @@ def induction(xbags: list[Bag], ybags: list[Bag], xbags_test: list[Bag]) -> dict
 
         rels_dummy = find_consts_rels(xregs_lgg, yregs_lgg)
         rels_maps = find_maps_rels(xbags, ybags, xbags_test, rels_dummy)
-        return {**rels_dummy, **rels_maps}
+        sol = {"length": "FROM_X", "regions": {**rels_dummy, **rels_maps}}
+        return sol
     return {}
 
 
@@ -28,12 +29,12 @@ def find_consts_rels(x: dict, y: dict) -> dict:
             continue
         for xk, xv in x.items():
             if xv == yv:
-                rels[yk] = xk
+                rels[yk] = f"FROM_X_{xk}"
                 break
     return rels
 
 
-def _one2one_rel(a: list[str], b: list[str]) -> bool | dict:
+def _dict_rel(a: list[str], b: list[str]) -> bool | dict:
     rel = {}
     for x, y in zip(a, b):
         if x not in rel:
@@ -55,7 +56,7 @@ def find_maps_rels(
         ykeys = [getattr(r, f) for b in ybags for r in b.regions]
         xkeys_test = [getattr(r, f) for b in xbags_test for r in b.regions]
         if all(x in xkeys for x in xkeys_test):
-            o2o = _one2one_rel(xkeys, ykeys)
+            o2o = _dict_rel(xkeys, ykeys)
             if isinstance(o2o, dict):
                 maps[f] = o2o
     return maps

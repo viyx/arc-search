@@ -37,19 +37,19 @@ def add_first_repr(
 ) -> str:
     nname = f"{parent}_{opname}_{str(bg)}"
     bags, hashes = _extract_regs(data, bg)
-    lgg = lgg_prim(bags)
+    level_lgg = lgg_prim(bags)
     if test_data:
         test_bags, test_hashes = _extract_regs(test_data, bg)
         g.add_node(
             nname,
-            lgg=lgg,
+            level_lgg=level_lgg,
             data=bags,
             hashes=hashes,
             test_data=test_bags,
             test_hashes=test_hashes,
         )
     else:
-        g.add_node(nname, lgg=lgg, data=bags, hashes=hashes)
+        g.add_node(nname, level_lgg=level_lgg, data=bags, hashes=hashes)
 
     g.add_edge(parent, nname)
     return nname
