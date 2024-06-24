@@ -47,17 +47,21 @@ from reprs.primitives import Bag, Region
 
 
 def _flatten_and_hash(data: np.ndarray, bg: int) -> str:
-    flatten = data.flatten()
-    one_colored = len(np.unique(flatten)) == 1
+    one_colored = len(np.unique(data)) == 1
     if one_colored:
         return str(data[0, 0])
-
-    _xs, *_ = np.where(flatten == bg)
-    flatten[_xs] = -1
-    return str(hash(str(flatten)))
+    bm = _set_bitmap(data, bg)
+    return str(hash(str(bm.flatten())))
 
 
-def extract_region(data: np.ndarray, outdict: dict, bg: int) -> Region:
+def _set_bitmap(data: np.ndarray, bg: int) -> np.ndarray:
+    _xs, _ys = np.where(data == bg)
+    copy = np.array(data)
+    copy[_xs, _ys] = -1
+    return copy
+
+
+def make_region(data: np.ndarray, outdict: dict, bg: int) -> Region:
     r = Region(
         x=0,
         y=0,
@@ -72,15 +76,19 @@ def extract_region(data: np.ndarray, outdict: dict, bg: int) -> Region:
 
 
 def extract_bag(data: np.ndarray, outdict: dict, bg: int) -> Bag:
-    mask = data != bg
-    comps, ncomps = label(mask, return_num=True, background=bg, connectivity=1)
+    if bg == -1:
+        comps, ncomps = label(data, return_num=True, background=bg, connectivity=1)
+    else:
+        if bg in data:
+            mask = data != bg
+            comps, ncomps = label(mask, return_num=True, background=bg, connectivity=1)
+        else:
+            comps, ncomps = label(data, return_num=True, background=bg, connectivity=1)
     regions = []
     for i in range(1, ncomps + 1):
         xs, ys = np.where(comps == i)
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
-        regions.append(
-            extract_region(data[xmin : xmax + 1, ymin : ymax + 1], outdict, bg)
-        )
+        regions.append(make_region(data[xmin : xmax + 1, ymin : ymax + 1], outdict, bg))
     return Bag(regions=regions, length=len(regions))
 
 

@@ -6,25 +6,27 @@ def lgg_dist(lgg1: dict, lgg2: dict) -> float:
         if k not in lgg2:
             continue
         if isinstance(lgg1[k], dict) and isinstance(lgg2[k], dict):
-            m += lgg_dist(lgg1[k], lgg2[k])
+            m += 1 - lgg_dist(lgg1[k], lgg2[k])
         elif lgg1[k] != "VAR" and lgg1[k] == lgg2[k]:
             m += 1
-    return m / n
+    return 1 - m / n
 
 
 def pairwise_dists(l1: list[dict], l2: list[dict]) -> list:
     return [[lgg_dist(d1, d2) for d2 in l2] for d1 in l1]
 
 
-def dict_dist(d_from: dict, d_to: dict):
+def dict_keys_dist(a: dict, b: dict, exclude: list[str] | None = None):
     n = 0
     m = 0
-    for k in d_from:
-        n += 1
-        if k not in d_to:
+    for k in a:
+        if exclude is not None and k in exclude:
             continue
-        if isinstance(d_from[k], dict) and isinstance(d_to[k], dict):
-            m += dict_dist(d_from[k], d_to[k])
+        n += 1
+        if k not in b:
+            continue
+        if isinstance(a[k], dict) and isinstance(b[k], dict):
+            m += 1 - dict_keys_dist(a[k], b[k])
         else:
             m += 1
-    return m / n
+    return 1 - (m / n)

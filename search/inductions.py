@@ -1,37 +1,63 @@
-from reprs.primitives import Bag
-from search.lgg import lgg_dict, lgg_prim
+from typing import Hashable
+
+from reprs.primitives import Bag, Region
+from search.lgg import lgg_prim
 
 
-def induction(xbags: list[Bag], ybags: list[Bag], xbags_test: list[Bag]) -> dict:
-    xs_bags_lgg = lgg_prim(xbags)
-    ys_bags_lgg = lgg_prim(ybags)
-    xs_test = lgg_prim(xbags_test)
-
-    # will be more parameters
-    # we are inside 1-1 bag
-    if xs_bags_lgg["length"] == ys_bags_lgg["length"] == xs_test["length"]:
-        # find funcss
-        xregs_lgg = lgg_dict([lgg_prim(x.regions) for x in xbags])
-        yregs_lgg = lgg_dict([lgg_prim(x.regions) for x in ybags])
-        # xregs_test_lgg = _lgg([lgg(x.regions) for x in xbags_test])
-
-        rels_dummy = find_consts_rels(xregs_lgg, yregs_lgg)
-        rels_maps = find_maps_rels(xbags, ybags, xbags_test, rels_dummy)
-        sol = {"length": "FROM_X", "regions": {**rels_dummy, **rels_maps}}
-        return sol
-    return {}
-
-
-def find_consts_rels(x: dict, y: dict) -> dict:
-    rels = {}
-    for yk, yv in y.items():
-        if yv == "VAR":
+def fast11_induction(
+    xbags: list[Bag | Region], ybags: list[Bag | Region], exclude: dict | None = None
+) -> dict:
+    result = {}
+    if len(xbags) != len(ybags):
+        return result
+    search_bag_fields = ybags[0].model_hashable_fields
+    if exclude:
+        search_bag_fields = ybags[0].model_hashable_fields - exclude.keys()
+    for f in search_bag_fields:
+        if not isinstance(getattr(ybags[0], f), Hashable):
+            x_flatten_regions = [r for x in xbags for r in x.regions]
+            y_flatten_regions = [r for x in ybags for r in x.regions]
+            ex_ = exclude.get(f) if exclude else None
+            result[f] = fast11_induction(x_flatten_regions, y_flatten_regions, ex_)
             continue
-        for xk, xv in x.items():
-            if xv == yv:
-                rels[yk] = f"FROM_X_{xk}"
-                break
-    return rels
+        else:
+            xa = [getattr(b, f) for b in xbags]
+            ya = [getattr(b, f) for b in ybags]
+            const_rel = find_consts_rels(xa, ya)
+
+            # FROMX
+            if const_rel:
+                result[f] = "FROMX"
+                continue
+
+            # CONST
+            if all(ya[0] == y_ for y_ in ya):
+                result[f] = ya[0]
+        # for f in search_bag_fields:
+        #     rels_dummy = find_consts_rels(xregs_lgg, yregs_lgg)
+        # rels_maps = find_maps_rels(xbags, ybags, xbags_test, rels_dummy)
+        # sol = {"length": "FROM_X", "regions": {**rels_dummy, **rels_maps}}
+        # return sol
+    return result
+
+
+# def find_consts_rels(x: dict, y: dict, exclude: dict) -> dict:
+#     rels = {}
+#     for yk in y.keys() - exclude:
+#         if y[yk] == "VAR":
+#             continue
+#         for xk, xv in x.items():
+#             if xv == y[yk]:
+#                 rels[yk] = f"FROM_X_{xk}"
+#                 break
+#     return rels
+
+
+def find_consts_rels(x: list[int], y: list[int]) -> bool:
+    for a, b in zip(x, y):
+        if a != b:
+            return False
+    return True
 
 
 def _dict_rel(a: list[str], b: list[str]) -> bool | dict:

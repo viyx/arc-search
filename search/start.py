@@ -1,11 +1,15 @@
-from collections import defaultdict
+from itertools import product
+from queue import PriorityQueue
 
-import networkx as nx
+import numpy as np
+from networkx import DiGraph
 
 from datasets.arc import RawTaskData
-from search.graph import add_first_repr
-from search.inductions import induction
-from search.metrics import dict_dist, pairwise_dists
+from reprs.primitives import Bag
+from search.distances import dict_keys_dist, pairwise_dists
+from search.graph import add_topdown, make_regions
+from search.inductions import fast11_induction
+from search.lgg import lgg_prim
 
 # def try_linear_mapping(x: list[int], y: list[int]) -> object | None:
 #     if len(x) != len(y):
@@ -65,37 +69,77 @@ class TaskSearch:
     def __init__(self, task: RawTaskData) -> None:
         self.task = task
         self.success = False
-        self.steps = defaultdict(dict)
+        self.q = PriorityQueue()
+        self.closed = []
+        self.gx, self.gy = None, None
+
+    def _put(self, xnode: str, ynode: str, dist: float) -> None:
+        pair = f"{xnode}:{ynode}"
+        t = (dist, pair)
+        if pair not in self.closed:
+            self.q.put(t)
+
+    def _get(self) -> tuple[float, str, str]:
+        dist, pair = self.q.get()
+        return dist, *pair.split(":")
+
+    def _init_search(self) -> None:
+        self.gx, self.gy = DiGraph(), DiGraph()
+        x_bags, x_hashes = make_regions(self.task.train_x, bg=-1)
+        x_test_bags, x_test_hashes = make_regions(self.task.test_x, bg=-1)
+        y_bags, y_hashes = make_regions(self.task.train_y, bg=-1)
+        self.gx.add_node(
+            "0",
+            data=x_bags,
+            hashes=x_hashes,
+            test_data=x_test_bags,
+            test_hashes=x_test_hashes,
+        )
+        self.gy.add_node("0", data=y_bags, hashes=y_hashes, solved_yet={})
+        self._put("0", "0", 0)
 
     def search_topdown(self) -> None:
-        gx, gy = nx.DiGraph(), nx.DiGraph()
-        gx.add_node("0")
-        gy.add_node("0")
+        self._init_search()
+        while not self.q.empty() or self.success:
+            _, xnode, ynode = self._get()
 
-        for p in [-1]:
-            xnname = add_first_repr(
-                gx, self.task.train_x, "repr", "0", p, self.task.test_x
-            )
-            ynname = add_first_repr(gy, self.task.train_y, "repr", "0", p)
+            xbags: list[Bag] = self.gx.nodes[xnode]["data"]
+            ybags: list[Bag] = self.gy.nodes[ynode]["data"]
 
-        # calc metrics
-        x_level_lggs = [gx.nodes[n]["level_lgg"] for n in [xnname]]
-        y_level_lggs = [gy.nodes[n]["level_lgg"] for n in [ynname]]
+            solved_yet = self.gy.nodes[ynode]["solved_yet"]
+            ind1 = fast11_induction(xbags, ybags, solved_yet)
+
+            solved = np.isclose(dict_keys_dist(Bag.blank(), ind1, ["raw"]), 0)
+            self.gy.nodes[ynode]["solved"] = solved
+            self.gy.nodes[ynode]["solved_yet"] = {"xnode": xnode, "maps": ind1}
+
+            if solved:
+                raise NotImplementedError()
+            new_ynodes = []
+            for p in [-1, 0]:
+                x_data = [r.raw for b in xbags for r in b.regions]
+                y_data = [r.raw for b in ybags for r in b.regions]
+                x_data_test = [
+                    r.raw for b in self.gx.nodes[xnode]["test_data"] for r in b.regions
+                ]
+
+                add_topdown(self.gx, x_data, "repr", xnode, p, x_data_test)
+                ynew = add_topdown(self.gy, y_data, "repr", ynode, p, solved_yet={})
+                new_ynodes.append(ynew)
+
+            self.closed.append(f"{xnode}:{ynode}")
+            self.put(new_ynodes)
+
+    def put(self, ynodes: list[str]) -> None:
+        all_xnodes = self.gx.nodes
+        x_lggs = [lgg_prim(self.gx.nodes[n]["data"]) for n in all_xnodes]
+        y_lggs = [lgg_prim(self.gy.nodes[n]["data"]) for n in ynodes]
 
         # select nodes
-
-        _ = pairwise_dists(x_level_lggs, y_level_lggs)
-
-        ind1 = induction(
-            gx.nodes[xnname]["data"],
-            gy.nodes[ynname]["data"],
-            gx.nodes[xnname]["test_data"],
-        )
-
-        perc = dict_dist(gy.nodes[ynname]["level_lgg"], ind1)
-        gy.nodes[ynname]["solution"] = {"x_node": xnname, "maps": ind1, "percent": perc}
-
-        pass
+        dists = np.ravel(pairwise_dists(x_lggs, y_lggs))
+        pairs = list(product(all_xnodes, ynodes))
+        for d, (xnode, ynode) in zip(dists, pairs):
+            self._put(xnode, ynode, d)
 
     # def step(self, ydata, xdata, ylevel, xlevel):
     #     step = {}
