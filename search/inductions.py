@@ -83,6 +83,6 @@ def find_maps_rels(
         xkeys_test = [getattr(r, f) for b in xbags_test for r in b.regions]
         if all(x in xkeys for x in xkeys_test):
             o2o = _dict_rel(xkeys, ykeys)
-            if isinstance(o2o, dict):
+            if o2o:
                 maps[f] = o2o
     return maps

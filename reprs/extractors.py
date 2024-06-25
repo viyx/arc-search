@@ -68,7 +68,7 @@ def make_region(data: np.ndarray, outdict: dict, bg: int) -> Region:
         raw_hash=_flatten_and_hash(data, bg),
         height=data.shape[0],
         width=data.shape[1],
-        raw=data,
+        raw=_set_bitmap(data, bg),
     )
     if len(r.raw_hash) > 1:
         outdict[r.raw_hash] = data
@@ -90,6 +90,10 @@ def extract_bag(data: np.ndarray, outdict: dict, bg: int) -> Bag:
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
         regions.append(make_region(data[xmin : xmax + 1, ymin : ymax + 1], outdict, bg))
     return Bag(regions=regions, length=len(regions))
+
+
+def can_reduce_any(data: list[np.ndarray]) -> bool:
+    return any(len(np.unique(a) > -1) > 1 for a in data)
 
 
 # def extract_primitives(data: np.ndarray, outdict: dict) -> list[Region]:

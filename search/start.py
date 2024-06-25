@@ -2,12 +2,10 @@ from itertools import product
 from queue import PriorityQueue
 
 import numpy as np
-from networkx import DiGraph
 
 from datasets.arc import RawTaskData
-from reprs.primitives import Bag
-from search.distances import dict_keys_dist, pairwise_dists
-from search.graph import add_topdown, make_regions
+from search.distances import pairwise_dists
+from search.graph import BiTree, make_regions
 from search.inductions import fast11_induction
 from search.lgg import lgg_prim
 
@@ -71,7 +69,7 @@ class TaskSearch:
         self.success = False
         self.q = PriorityQueue()
         self.closed = []
-        self.gx, self.gy = None, None
+        self.bt = BiTree()
 
     def _put(self, xnode: str, ynode: str, dist: float) -> None:
         pair = f"{xnode}:{ynode}"
@@ -84,60 +82,58 @@ class TaskSearch:
         return dist, *pair.split(":")
 
     def _init_search(self) -> None:
-        self.gx, self.gy = DiGraph(), DiGraph()
         x_bags, x_hashes = make_regions(self.task.train_x, bg=-1)
         x_test_bags, x_test_hashes = make_regions(self.task.test_x, bg=-1)
         y_bags, y_hashes = make_regions(self.task.train_y, bg=-1)
-        self.gx.add_node(
+        self.bt.add_or_get_node_x(
             "0",
             data=x_bags,
             hashes=x_hashes,
             test_data=x_test_bags,
             test_hashes=x_test_hashes,
         )
-        self.gy.add_node("0", data=y_bags, hashes=y_hashes, solved_yet={})
+        self.bt.add_or_get_node_y("0", data=y_bags, hashes=y_hashes)
         self._put("0", "0", 0)
 
     def search_topdown(self) -> None:
         self._init_search()
-        while not self.q.empty() or self.success:
+        while not self.q.qsize() != 0:
             _, xnode, ynode = self._get()
 
-            xbags: list[Bag] = self.gx.nodes[xnode]["data"]
-            ybags: list[Bag] = self.gy.nodes[ynode]["data"]
+            xbags = self.bt.get_xdata(xnode)
+            ybags = self.bt.get_ydata(ynode)
 
-            solved_yet = self.gy.nodes[ynode]["solved_yet"]
+            solved_yet = self.bt.get_solved_yet(ynode)
             ind1 = fast11_induction(xbags, ybags, solved_yet)
 
-            solved = np.isclose(dict_keys_dist(Bag.blank(), ind1, ["raw"]), 0)
-            self.gy.nodes[ynode]["solved"] = solved
-            self.gy.nodes[ynode]["solved_yet"] = {"xnode": xnode, "maps": ind1}
+            self.bt.add_solved_yet(ynode, xnode, ind1)
+            if self.bt.get_solved(ynode):
+                self.success = True
+                continue
 
-            if solved:
-                raise NotImplementedError()
-            new_ynodes = []
+            new_ynodes = set()
+            new_xnodes = set()
             for p in [-1, 0]:
-                x_data = [r.raw for b in xbags for r in b.regions]
-                y_data = [r.raw for b in ybags for r in b.regions]
-                x_data_test = [
-                    r.raw for b in self.gx.nodes[xnode]["test_data"] for r in b.regions
-                ]
-
-                add_topdown(self.gx, x_data, "repr", xnode, p, x_data_test)
-                ynew = add_topdown(self.gy, y_data, "repr", ynode, p, solved_yet={})
-                new_ynodes.append(ynew)
+                xnew = self.bt.add_topdown_x(xnode, bg=p)
+                # xnew = None
+                ynew = self.bt.add_topdown_y(ynode, bg=p)
+                if xnew:
+                    new_xnodes.add(xnew)
+                if ynew:
+                    new_ynodes.add(ynew)
 
             self.closed.append(f"{xnode}:{ynode}")
-            self.put(new_ynodes)
+            if len(new_xnodes | new_ynodes) != 0:
+                self.put(new_ynodes or self.bt.gy.nodes, new_xnodes or self.bt.gx.nodes)
 
-    def put(self, ynodes: list[str]) -> None:
-        all_xnodes = self.gx.nodes
-        x_lggs = [lgg_prim(self.gx.nodes[n]["data"]) for n in all_xnodes]
-        y_lggs = [lgg_prim(self.gy.nodes[n]["data"]) for n in ynodes]
+    def put(self, ynodes: set[str], xnodes: set[str]) -> None:
+        if len(ynodes) == len(xnodes) == 0:
+            return
+        x_lggs = [lgg_prim(self.bt.get_xdata(n)) for n in xnodes]
+        y_lggs = [lgg_prim(self.bt.get_ydata(n)) for n in ynodes]
 
-        # select nodes
         dists = np.ravel(pairwise_dists(x_lggs, y_lggs))
-        pairs = list(product(all_xnodes, ynodes))
+        pairs = list(product(xnodes, ynodes))
         for d, (xnode, ynode) in zip(dists, pairs):
             self._put(xnode, ynode, d)
 
