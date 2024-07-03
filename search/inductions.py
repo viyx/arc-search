@@ -10,15 +10,17 @@ def fast11_induction(
     result = {}
     if len(xbags) != len(ybags):
         return result
-    search_bag_fields = ybags[0].model_hashable_fields
+    search_bag_fields = ybags[0].target_fields
     if exclude:
-        search_bag_fields = ybags[0].model_hashable_fields - exclude.keys()
+        search_bag_fields = ybags[0].target_fields - exclude.keys()
     for f in search_bag_fields:
         if not isinstance(getattr(ybags[0], f), Hashable):
             x_flatten_regions = [r for x in xbags for r in x.regions]
             y_flatten_regions = [r for x in ybags for r in x.regions]
             ex_ = exclude.get(f) if exclude else None
-            result[f] = fast11_induction(x_flatten_regions, y_flatten_regions, ex_)
+            res = fast11_induction(x_flatten_regions, y_flatten_regions, ex_)
+            if res:
+                result[f] = res
             continue
         else:
             xa = [getattr(b, f) for b in xbags]
@@ -41,16 +43,10 @@ def fast11_induction(
     return result
 
 
-# def find_consts_rels(x: dict, y: dict, exclude: dict) -> dict:
-#     rels = {}
-#     for yk in y.keys() - exclude:
-#         if y[yk] == "VAR":
-#             continue
-#         for xk, xv in x.items():
-#             if xv == y[yk]:
-#                 rels[yk] = f"FROM_X_{xk}"
-#                 break
-#     return rels
+def slow1many_induction(
+    xbags: list[Bag | Region], ybags: list[Bag | Region], exclude: dict | None = None
+) -> dict:
+    pass
 
 
 def find_consts_rels(x: list[int], y: list[int]) -> bool:

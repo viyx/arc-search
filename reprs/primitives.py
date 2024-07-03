@@ -1,5 +1,5 @@
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 
 class Region(BaseModel):
@@ -8,8 +8,9 @@ class Region(BaseModel):
     width: int
     height: int
     raw: np.ndarray
+    bitmap: np.ndarray
     raw_hash: str
-    # bitmap_hash
+    bitmap_hash: str
 
     @classmethod
     def blank(cls) -> dict:
@@ -23,8 +24,12 @@ class Region(BaseModel):
         }
 
     @property
-    def model_hashable_fields(self) -> set[str]:
+    def target_fields(self) -> set[str]:
         return self.model_fields_set - {"raw"}
+
+    # def view(self) -> np.ndarray:
+    #     a = np.full_like(self.bitmap, -1)
+    #     a
 
     def __hash__(self) -> int:
         return hash(str([self.x, self.y, self.width, self.height, self.raw_hash]))
@@ -34,16 +39,27 @@ class Region(BaseModel):
 
 
 class Bag(BaseModel):
-    length: int
     regions: list[Region]
 
+    @computed_field
     @property
-    def model_hashable_fields(self) -> set[str]:
+    def length(self) -> int:
+        return len(self.regions)
+
+    @property
+    def target_fields(self) -> set[str]:
         return self.model_fields_set
 
     @classmethod
     def blank(cls) -> dict:
         return {"regions": Region.blank(), "length": "UND"}
+
+    @classmethod
+    def merge(cls, bags: list["Bag"]) -> "Bag":
+        regions = []
+        for b in bags:
+            regions.extend(b.regions)
+        return Bag(regions=regions)
 
     def __hash__(self) -> int:
         return hash(str([hash(r) for r in self.regions]))

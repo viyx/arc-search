@@ -1,216 +1,219 @@
+from typing import Any
+
 import numpy as np
 from networkx import DiGraph
 
-from reprs.extractors import can_reduce_any, extract_bag, make_region
-from reprs.primitives import Bag, Region
-from search.distances import dict_keys_dist
-from search.lgg import lgg_prim
+from reprs.extractors import extract_bag, make_region
+from reprs.primitives import Bag
 
 
 def make_regions(data: list[np.ndarray], bg) -> tuple[list[Bag], list[dict]]:
     bags = []
     hashes = {}
     for x in data:
-        r = make_region(x, hashes, bg=bg)
+        r = make_region(x, 0, 0, hashes, bg)
         b = Bag(regions=[r], length=1)
         bags.append(b)
     return bags, hashes
 
 
-def extract_bags(data: list[np.ndarray], bg) -> tuple[list[Bag], list[dict]]:
+def extract_bags(data: list[np.ndarray], c: int, bg: int) -> tuple[list[Bag], dict]:
     bags = []
-    hashes = []
+    hashes = {}
     for x in data:
         h = {}
-        b = extract_bag(x, h, bg)
+        b = extract_bag(x, h, c, bg)
         bags.append(b)
-        hashes.append(h)
+        hashes.update(h)
     return bags, hashes
 
 
-def add_td_1reg_repr(
-    g: DiGraph,
-    data: np.ndarray,
-    opname: str,
-    parent: str,
-    bg: int,
-    test_data: np.ndarray | None = None,
-) -> str:
-    nname = f"{parent}_{opname}_{str(bg)}"
-    bags, hashes = make_regions(data, bg)
-    level_lgg = lgg_prim(bags)
-    if test_data:
-        test_bags, test_hashes = make_regions(test_data, bg)
-        g.add_node(
-            nname,
-            level_lgg=level_lgg,
-            data=bags,
-            hashes=hashes,
-            test_data=test_bags,
-            test_hashes=test_hashes,
-        )
-    else:
-        g.add_node(nname, level_lgg=level_lgg, data=bags, hashes=hashes)
-
-    g.add_edge(parent, nname)
-    return nname
+def bags_hash(data: list[Bag]) -> str:
+    content_hash = str(hash(f"{[hash(b) for b in data]}"))
+    return content_hash
 
 
-def add_topdown(
-    g: DiGraph,
-    data: list[np.ndarray],
-    opname: str,
-    parent: str,
-    bg: int,
-    test_data: list[np.ndarray] | None = None,
-    **kwargs,
-) -> str:
-    nname = f"{parent}_{opname}_{str(bg)}"
-    bags, hashes = extract_bags(data, bg)
-    if "test_data" in g.nodes[parent]:
-        test_bags, test_hashes = extract_bags(test_data, bg)
-        g.add_node(
-            nname,
-            data=bags,
-            hashes=hashes,
-            test_data=test_bags,
-            test_hashes=test_hashes,
-        )
-    else:
-        g.add_node(nname, data=bags, hashes=hashes, **kwargs)
-    g.add_edge(parent, nname)
-    return nname
-
-
-class BiTree:
+class DAG:
     def __init__(self) -> None:
-        self.gx = DiGraph()
-        self.gy = DiGraph()
+        self.g = DiGraph()
 
-    def _get_same_x(self, data_hash: str) -> list[str]:
-        hashes = self.gx.nodes.data("data_hash")
-        return [k for k, v in hashes if v == data_hash]
+    def filter_by(self, attr: str, value: Any) -> list[str]:
+        nodes = self.g.nodes.data(attr)
+        return [k for k, v in nodes if v == value]
 
-    def _get_same_y(self, data_hash: str) -> list[str]:
-        hashes = self.gy.nodes.data("data_hash")
-        return [k for k, v in hashes if v == data_hash]
+    def can_add_node(self, bags: list[Bag]) -> bool:
+        content_hash = bags_hash(bags)
+        same_hash = self.filter_by("content_hash", content_hash)
+        lngh = len(same_hash)
+        if lngh > 0:
+            if lngh > 1:
+                raise KeyError(f"{lngh} nodes with the same content.")
+            return False
+        return True
 
-    def add_or_get_node_x(
-        self,
-        name: str,
-        data: list[Bag],
-        hashes: list[dict],
-        test_data: list[Bag] | None = None,
-        test_hashes: list[dict] | None = None,
+    def add_node(
+        self, name: str, data: list[Bag], hashes: list[dict], **kwargs
     ) -> None:
-        data_hash = str(
-            hash(f"{[hash(b) for b in data]}_{[hash(b) for b in test_data]}")
-        )
-        sim = self._get_same_x(data_hash)
-        if sim:
-            if len(sim) > 1:
-                raise LookupError()
-            return sim[0]
-        self.gx.add_node(
-            name,
-            data=data,
-            test_data=test_data,
-            hashes=hashes,
-            test_hashes=test_hashes,
-            data_hash=data_hash,
-        )
-        return name
+        if self.can_add_node(data):
+            content_hash = bags_hash(data)
+            self.g.add_node(
+                name, data=data, hashes=hashes, content_hash=content_hash, **kwargs
+            )
 
-    def add_or_get_node_y(self, name: str, data: list[Bag], hashes: list[dict]) -> None:
-        data_hash = str(hash(str([hash(b) for b in data])))
-        sim = self._get_same_y(data_hash)
-        if sim:
-            if len(sim) > 1:
-                raise LookupError()
-            return sim[0]
-        self.gy.add_node(
-            name,
-            data=data,
-            hashes=hashes,
-            solved_yet={},
-            solved=False,
-            data_hash=data_hash,
-        )
-        return name
+    def get_data_by(self, node: str, attr: str) -> list[Any]:
+        return self.g.nodes[node][attr]
 
-    def get_xdata(self, xnode: str) -> list[Bag]:
-        if xnode not in self.gx.nodes:
-            raise ValueError()
-        return self.gx.nodes[xnode]["data"]
 
-    def get_xtestdata(self, xnode: str) -> list[Bag]:
-        if xnode not in self.gx.nodes:
-            raise ValueError()
-        return self.gx.nodes[xnode]["test_data"]
+class BiDAG:
+    def __init__(self) -> None:
+        self.xdag = DAG()
+        self.ydag = DAG()
 
-    def get_ydata(self, ynode: str) -> list[Bag]:
-        if ynode not in self.gx.nodes:
-            raise ValueError()
-        return self.gy.nodes[ynode]["data"]
+    # def _get_same_x(self, data_hash: str) -> list[str]:
+    #     hashes = self.gx.nodes.data("data_hash")
+    #     return [k for k, v in hashes if v == data_hash]
 
-    def get_solved_yet(self, ynode: str) -> dict:
-        if ynode not in self.gx.nodes:
-            raise ValueError()
-        return self.gy.nodes[ynode]["solved_yet"]
+    # def _get_same_y(self, data_hash: str) -> list[str]:
+    #     hashes = self.gy.nodes.data("data_hash")
+    #     return [k for k, v in hashes if v == data_hash]
 
-    def get_solved(self, ynode: str) -> bool:
-        if ynode not in self.gx.nodes:
-            raise ValueError()
-        return self.gy.nodes[ynode]["solved"]
+    # def add_node_x(
+    #     self,
+    #     name: str,
+    #     data: list[Bag],
+    #     hashes: list[dict],
+    #     test_data: list[Bag],
+    #     test_hashes: list[dict],
+    # ) -> None:
+    #     data_hash = str(
+    #         hash(f"{[hash(b) for b in data]}_{[hash(b) for b in test_data]}")
+    #     )
+    #     self.gx.add_node(
+    #         name,
+    #         data=data,
+    #         test_data=test_data,
+    #         hashes=hashes,
+    #         test_hashes=test_hashes,
+    #         data_hash=data_hash,
+    #     )
 
-    def add_solved_yet(self, ynode: str, xnode: str, to_add: dict) -> None:
-        "Make sortof `left join` for two dicts with possible nested dicts."
-        if ynode not in self.gx.nodes or xnode not in self.gx:
-            raise ValueError()
-        solved_yet = self.get_solved_yet(ynode)
-        for k, v in to_add.items():
-            if k not in solved_yet:
-                solved_yet[k] = {"op": v, "ref": xnode}
-            elif isinstance(v, dict):
-                for k2, v2 in v:
-                    if k2 not in solved_yet[k]:
-                        solved_yet[k][k2] = {"op": v2, "ref": xnode}
-        solved = np.isclose(dict_keys_dist(Bag.blank(), solved_yet, ["raw"]), 0)
-        self.gy.nodes[ynode]["solved"] = solved
+    # def add_node_y(self, name: str, data: list[Bag], hashes: list[dict]) -> None:
+    #     data_hash = str(hash(str([hash(b) for b in data])))
+    #     self.gy.add_node(
+    #         name,
+    #         data=data,
+    #         hashes=hashes,
+    #         solved_yet={},
+    #         solved=False,
+    #         data_hash=data_hash,
+    #     )
 
-    def get_flatten_regions_y(self, ynode: str) -> list[np.ndarray]:
-        return [r.raw for b in self.get_ydata(ynode) for r in b.regions]
+    # def get_xdata(self, xnode: str) -> list[Bag]:
+    #     if xnode not in self.gx.nodes:
+    #         raise ValueError()
+    #     return self.gx.nodes[xnode]["data"]
 
-    def get_flatten_regions_x(self, xnode: str) -> list[Region]:
-        return [r.raw for b in self.get_xdata(xnode) for r in b.regions]
+    # def get_xtestdata(self, xnode: str) -> list[Bag]:
+    #     if xnode not in self.gx.nodes:
+    #         raise ValueError()
+    #     return self.gx.nodes[xnode]["test_data"]
 
-    def get_flatten_regions_test(self, xnode: str) -> list[Region]:
-        return [r.raw for b in self.get_xtestdata(xnode) for r in b.regions]
+    # def get_ydata(self, ynode: str) -> list[Bag]:
+    #     if ynode not in self.gy.nodes:
+    #         raise ValueError()
+    #     return self.gy.nodes[ynode]["data"]
 
-    def add_topdown_x(self, node: str, bg: int) -> str | None:
-        data_test_flatten = self.get_flatten_regions_test(node)
-        data_flatten = self.get_flatten_regions_x(node)
-        if not can_reduce_any(data_flatten) and not can_reduce_any(data_test_flatten):
-            return None
-        bags, hashes = extract_bags(data_flatten, bg)
-        test_bags, test_hashes = extract_bags(data_test_flatten, bg)
-        candidate_name = f"{node}_TD_{bg}"
-        newname = self.add_or_get_node_x(
-            candidate_name,
-            data=bags,
-            hashes=hashes,
-            test_hashes=test_hashes,
-            test_data=test_bags,
-        )
-        self.gx.add_edge(node, newname)
-        return newname
+    # def get_solved_yet(self, ynode: str) -> dict:
+    # if ynode not in self.gy.nodes:
+    #     raise ValueError()
+    # return self.gy.nodes[ynode]["solved_yet"]
 
-    def add_topdown_y(self, node: str, bg: int) -> str | None:
-        data_flatten = self.get_flatten_regions_y(node)
-        if not can_reduce_any(data_flatten):
-            return None
-        bags, hashes = extract_bags(data_flatten, bg)
-        candidate_name = f"{node}_TD_{bg}"
-        newname = self.add_or_get_node_y(candidate_name, data=bags, hashes=hashes)
-        self.gy.add_edge(node, newname)
-        return newname
+    # def is_solved(self, ynode: str) -> bool:
+    #     if ynode not in self.gy.nodes:
+    #         raise ValueError()
+    #     return self.gy.nodes[ynode]["solved"]
+
+    # def add_solved_yet(self, ynode: str, refnode: str, to_add: dict) -> None:
+    #     "Make sortof `left join` for two dicts with possible nested dicts."
+    #     if ynode not in self.gy.nodes or refnode not in self.gx:
+    #         raise ValueError()
+    #     solved_yet = self.get_solved_yet(ynode)
+    #     for k, v in to_add.items():
+    #         if k not in solved_yet:
+    #             solved_yet[k] = {"op": v, "ref": refnode}
+    #         elif isinstance(v, dict):
+    #             for k2, v2 in v:
+    #                 if k2 not in solved_yet[k]:
+    #                     solved_yet[k][k2] = {"op": v2, "ref": refnode}
+    #     solved = np.isclose(dict_keys_dist(Bag.blank(), solved_yet, ["raw"]), 0)
+    #     self.gy.nodes[ynode]["solved"] = solved
+
+    # def get_flatten_regions_y(self, ynode: str) -> list[np.ndarray]:
+    #     return [r.raw for b in self.get_ydata(ynode) for r in b.regions]
+
+    # def get_flatten_regions_x(self, xnode: str) -> list[Region]:
+    #     return [r.raw for b in self.get_xdata(xnode) for r in b.regions]
+
+    # def get_flatten_regions_test(self, xnode: str) -> list[Region]:
+    # return [r.raw for b in self.get_xtestdata(xnode) for r in b.regions]
+
+    def add_topdown_x(self, parent_node: str, c: int, bg: int) -> str | None:
+        ebags: list[Bag] = self.xdag.get_data_by(parent_node, "data")
+        ebags_test: list[Bag] = self.xdag.get_data_by(parent_node, "test_data")
+        eregions: list[list[np.ndarray]] = [[r.raw for r in e.regions] for e in ebags]
+        eregions_test: list[list[np.ndarray]] = [
+            [r.raw for r in e.regions] for e in ebags_test
+        ]
+
+        node_bags = []  # per example bag
+        node_hashes = []  # per example hashes
+        for e in eregions:
+            _ebags, _ehashes = extract_bags(e, c, bg)
+            bag = Bag.merge(_ebags)
+            node_bags.append(bag)
+            node_hashes.append(_ehashes)
+
+        node_bags_test = []
+        node_hashes_test = []
+        for e in eregions_test:
+            _ebags, _ehashes = extract_bags(e, c, bg)
+            bag = Bag.merge(_ebags)
+            node_bags_test.append(bag)
+            node_hashes_test.append(_ehashes)
+
+        if self.xdag.can_add_node(node_bags):
+            candidate_name = f"{parent_node}_TD_c={c}_b={bg}|"
+            self.xdag.add_node(
+                candidate_name,
+                data=node_bags,
+                hashes=node_hashes,
+                test_hashes=node_hashes_test,
+                test_data=node_bags_test,
+            )
+            self.xdag.g.add_edge(parent_node, candidate_name)
+            return candidate_name
+        return None
+
+    def add_topdown_y(self, parent_node: str, c: int, bg: int) -> str | None:
+        ebags: list[Bag] = self.ydag.get_data_by(parent_node, "data")
+        eregions: list[list[np.ndarray]] = [[r.raw for r in e.regions] for e in ebags]
+
+        node_bags = []  # per example bag
+        node_hashes = []  # per example hashes
+        for e in eregions:
+            _ebags, _ehashes = extract_bags(e, c, bg)
+            bag = Bag.merge(_ebags)
+            node_bags.append(bag)
+            node_hashes.append(_ehashes)
+        if self.ydag.can_add_node(node_bags):
+            candidate_name = f"{parent_node}_TD_c={c}_b={bg}|"
+            self.ydag.add_node(
+                candidate_name,
+                data=node_bags,
+                hashes=node_hashes,
+                solved=False,
+                solved_yet={},
+            )
+            self.ydag.g.add_edge(parent_node, candidate_name)
+            return candidate_name
+        return None
