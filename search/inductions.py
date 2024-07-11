@@ -25,7 +25,7 @@ def fast11_induction(
         else:
             xa = [getattr(b, f) for b in xbags]
             ya = [getattr(b, f) for b in ybags]
-            const_rel = find_consts_rels(xa, ya)
+            const_rel = _eq_rels(xa, ya)
 
             # FROMX
             if const_rel:
@@ -49,7 +49,7 @@ def slow1many_induction(
     pass
 
 
-def find_consts_rels(x: list[int], y: list[int]) -> bool:
+def _eq_rels(x: list[int], y: list[int]) -> bool:
     for a, b in zip(x, y):
         if a != b:
             return False

@@ -9,8 +9,34 @@ class Region(BaseModel):
     height: int
     raw: np.ndarray
     bitmap: np.ndarray
-    raw_hash: str
-    bitmap_hash: str
+    # raw_hash: str  - computable
+    # bitmap_hash: str - computable
+
+    @computed_field
+    @property
+    def raw_hash(self) -> str:
+        _r = self.raw_view
+        unqs = np.unique(_r)
+        if len(unqs) == 1:
+            if unqs[0] == -1:
+                return "-1"
+            return str(unqs[0])
+        return str(hash(str([_r.flatten(), self.height, self.width])))
+
+    @computed_field
+    @property
+    def bitmap_hash(self) -> str:
+        unqs = np.unique(self.bitmap)
+        if len(unqs) == 1 and unqs[0] == -1:
+            return "-1"
+        return str(hash(str([self.bitmap.flatten(), self.height, self.width])))
+
+    @property
+    def raw_view(self) -> np.ndarray:
+        _r = np.full_like(self.bitmap, -1)
+        _m = self.bitmap != -1
+        _r[_m] = self.raw[_m]
+        return _r
 
     @classmethod
     def blank(cls) -> dict:
@@ -25,14 +51,21 @@ class Region(BaseModel):
 
     @property
     def target_fields(self) -> set[str]:
-        return self.model_fields_set - {"raw"}
-
-    # def view(self) -> np.ndarray:
-    #     a = np.full_like(self.bitmap, -1)
-    #     a
+        return self.model_fields_set - {"raw", "bitmap"}
 
     def __hash__(self) -> int:
-        return hash(str([self.x, self.y, self.width, self.height, self.raw_hash]))
+        return hash(
+            str(
+                [
+                    self.x,
+                    self.y,
+                    self.width,
+                    self.height,
+                    self.raw_hash,
+                    self.bitmap_hash,
+                ]
+            )
+        )
 
     class Config:
         arbitrary_types_allowed = True
@@ -62,4 +95,4 @@ class Bag(BaseModel):
         return Bag(regions=regions)
 
     def __hash__(self) -> int:
-        return hash(str([hash(r) for r in self.regions]))
+        return hash(str(sorted(hash(r) for r in self.regions)))

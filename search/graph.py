@@ -7,11 +7,11 @@ from reprs.extractors import extract_bag, make_region
 from reprs.primitives import Bag
 
 
-def make_regions(data: list[np.ndarray], bg) -> tuple[list[Bag], list[dict]]:
+def make_dump_regions(data: list[np.ndarray]) -> tuple[list[Bag], list[dict]]:
     bags = []
     hashes = {}
     for x in data:
-        r = make_region(x, 0, 0, hashes, bg)
+        r = make_region(x, np.ones_like(x), 0, 0, hashes)
         b = Bag(regions=[r], length=1)
         bags.append(b)
     return bags, hashes
@@ -69,100 +69,14 @@ class BiDAG:
         self.xdag = DAG()
         self.ydag = DAG()
 
-    # def _get_same_x(self, data_hash: str) -> list[str]:
-    #     hashes = self.gx.nodes.data("data_hash")
-    #     return [k for k, v in hashes if v == data_hash]
-
-    # def _get_same_y(self, data_hash: str) -> list[str]:
-    #     hashes = self.gy.nodes.data("data_hash")
-    #     return [k for k, v in hashes if v == data_hash]
-
-    # def add_node_x(
-    #     self,
-    #     name: str,
-    #     data: list[Bag],
-    #     hashes: list[dict],
-    #     test_data: list[Bag],
-    #     test_hashes: list[dict],
-    # ) -> None:
-    #     data_hash = str(
-    #         hash(f"{[hash(b) for b in data]}_{[hash(b) for b in test_data]}")
-    #     )
-    #     self.gx.add_node(
-    #         name,
-    #         data=data,
-    #         test_data=test_data,
-    #         hashes=hashes,
-    #         test_hashes=test_hashes,
-    #         data_hash=data_hash,
-    #     )
-
-    # def add_node_y(self, name: str, data: list[Bag], hashes: list[dict]) -> None:
-    #     data_hash = str(hash(str([hash(b) for b in data])))
-    #     self.gy.add_node(
-    #         name,
-    #         data=data,
-    #         hashes=hashes,
-    #         solved_yet={},
-    #         solved=False,
-    #         data_hash=data_hash,
-    #     )
-
-    # def get_xdata(self, xnode: str) -> list[Bag]:
-    #     if xnode not in self.gx.nodes:
-    #         raise ValueError()
-    #     return self.gx.nodes[xnode]["data"]
-
-    # def get_xtestdata(self, xnode: str) -> list[Bag]:
-    #     if xnode not in self.gx.nodes:
-    #         raise ValueError()
-    #     return self.gx.nodes[xnode]["test_data"]
-
-    # def get_ydata(self, ynode: str) -> list[Bag]:
-    #     if ynode not in self.gy.nodes:
-    #         raise ValueError()
-    #     return self.gy.nodes[ynode]["data"]
-
-    # def get_solved_yet(self, ynode: str) -> dict:
-    # if ynode not in self.gy.nodes:
-    #     raise ValueError()
-    # return self.gy.nodes[ynode]["solved_yet"]
-
-    # def is_solved(self, ynode: str) -> bool:
-    #     if ynode not in self.gy.nodes:
-    #         raise ValueError()
-    #     return self.gy.nodes[ynode]["solved"]
-
-    # def add_solved_yet(self, ynode: str, refnode: str, to_add: dict) -> None:
-    #     "Make sortof `left join` for two dicts with possible nested dicts."
-    #     if ynode not in self.gy.nodes or refnode not in self.gx:
-    #         raise ValueError()
-    #     solved_yet = self.get_solved_yet(ynode)
-    #     for k, v in to_add.items():
-    #         if k not in solved_yet:
-    #             solved_yet[k] = {"op": v, "ref": refnode}
-    #         elif isinstance(v, dict):
-    #             for k2, v2 in v:
-    #                 if k2 not in solved_yet[k]:
-    #                     solved_yet[k][k2] = {"op": v2, "ref": refnode}
-    #     solved = np.isclose(dict_keys_dist(Bag.blank(), solved_yet, ["raw"]), 0)
-    #     self.gy.nodes[ynode]["solved"] = solved
-
-    # def get_flatten_regions_y(self, ynode: str) -> list[np.ndarray]:
-    #     return [r.raw for b in self.get_ydata(ynode) for r in b.regions]
-
-    # def get_flatten_regions_x(self, xnode: str) -> list[Region]:
-    #     return [r.raw for b in self.get_xdata(xnode) for r in b.regions]
-
-    # def get_flatten_regions_test(self, xnode: str) -> list[Region]:
-    # return [r.raw for b in self.get_xtestdata(xnode) for r in b.regions]
-
     def add_topdown_x(self, parent_node: str, c: int, bg: int) -> str | None:
         ebags: list[Bag] = self.xdag.get_data_by(parent_node, "data")
         ebags_test: list[Bag] = self.xdag.get_data_by(parent_node, "test_data")
-        eregions: list[list[np.ndarray]] = [[r.raw for r in e.regions] for e in ebags]
+        eregions: list[list[np.ndarray]] = [
+            [r.raw_view for r in e.regions] for e in ebags
+        ]
         eregions_test: list[list[np.ndarray]] = [
-            [r.raw for r in e.regions] for e in ebags_test
+            [r.raw_view for r in e.regions] for e in ebags_test
         ]
 
         node_bags = []  # per example bag
@@ -196,7 +110,9 @@ class BiDAG:
 
     def add_topdown_y(self, parent_node: str, c: int, bg: int) -> str | None:
         ebags: list[Bag] = self.ydag.get_data_by(parent_node, "data")
-        eregions: list[list[np.ndarray]] = [[r.raw for r in e.regions] for e in ebags]
+        eregions: list[list[np.ndarray]] = [
+            [r.raw_view for r in e.regions] for e in ebags
+        ]
 
         node_bags = []  # per example bag
         node_hashes = []  # per example hashes
