@@ -23,8 +23,9 @@ def extract_bags(data: list[np.ndarray], c: int, bg: int) -> tuple[list[Bag], di
     for x in data:
         h = {}
         b = extract_bag(x, h, c, bg)
-        bags.append(b)
-        hashes.update(h)
+        if len(b.regions) > 0:
+            bags.append(b)
+            hashes.update(h)
     return bags, hashes
 
 
@@ -60,7 +61,7 @@ class DAG:
                 name, data=data, hashes=hashes, content_hash=content_hash, **kwargs
             )
 
-    def get_data_by(self, node: str, attr: str) -> list[Any]:
+    def get_data_by_attr(self, node: str, attr: str) -> list[Any]:
         return self.g.nodes[node][attr]
 
 
@@ -70,8 +71,8 @@ class BiDAG:
         self.ydag = DAG()
 
     def add_topdown_x(self, parent_node: str, c: int, bg: int) -> str | None:
-        ebags: list[Bag] = self.xdag.get_data_by(parent_node, "data")
-        ebags_test: list[Bag] = self.xdag.get_data_by(parent_node, "test_data")
+        ebags: list[Bag] = self.xdag.get_data_by_attr(parent_node, "data")
+        ebags_test: list[Bag] = self.xdag.get_data_by_attr(parent_node, "test_data")
         eregions: list[list[np.ndarray]] = [
             [r.raw_view for r in e.regions] for e in ebags
         ]
@@ -109,7 +110,7 @@ class BiDAG:
         return None
 
     def add_topdown_y(self, parent_node: str, c: int, bg: int) -> str | None:
-        ebags: list[Bag] = self.ydag.get_data_by(parent_node, "data")
+        ebags: list[Bag] = self.ydag.get_data_by_attr(parent_node, "data")
         eregions: list[list[np.ndarray]] = [
             [r.raw_view for r in e.regions] for e in ebags
         ]

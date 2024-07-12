@@ -3,26 +3,6 @@ from skimage.measure import label
 
 from reprs.primitives import Bag, Region
 
-# def _flatten_and_hash(data: np.ndarray, bg: int) -> str:
-#     one_colored = len(np.unique(data)) == 1
-#     if one_colored:
-#         return str(data[0, 0])
-#     bm = _add_bg(data, bg)
-#     return str(hash(str(bm.flatten())))
-
-
-# def _flatten_and_hash(data: np.ndarray) -> str:
-#     one_colored = len(np.unique(data)) == 1
-#     if one_colored:
-#         return str(data[0, 0])
-#     return str(hash(str(data.flatten())))
-
-
-# def _add_bg(data: np.ndarray, bg: int) -> np.ndarray:
-#     copy = np.array(data)
-#     copy[data == bg] = -1
-#     return copy
-
 
 def make_region(
     data: np.ndarray, bitmap: np.ndarray, x: int, y: int, outdict: dict
@@ -54,27 +34,30 @@ def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
 def extract_bag(data: np.ndarray, outdict: dict, c: int, bg: int) -> Bag:
     bg_compress = False
     if bg in data and bg != -1:
+        # remove background, cut full regions
         bg_compress = True
-        #  extract compressed regions
-        #  will be only full rect bitmaps
         mask = np.full_like(data, -1)
         mask[(data != bg) & (data != -1)] = 1
         comps, ncomps = _label(mask, c, -1)
     else:
-        comps, ncomps = _label(data, c, bg)
+        comps, ncomps = _label(data, c, -1)
     regions = []
     for i in range(1, ncomps + 1):
         _mask = comps == i
 
-        # find exterior rectangle
+        # find bounding rectangle
         xs, ys = np.where(_mask)
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
 
         _d = data[xmin : xmax + 1, ymin : ymax + 1]
         if bg_compress:
+            # create new region
             _b = np.ones_like(_d)
+            # _b[_d == -1] = -1  # clone bg
         else:
+            # repeat bg from cut region
             _b = _mask[xmin : xmax + 1, ymin : ymax + 1]
+            # _d[~_b] = -1
         r = make_region(_d, _b, xmin, ymin, outdict)
         regions.append(r)
     return Bag(regions=regions, length=len(regions))

@@ -11,6 +11,7 @@ class Region(BaseModel):
     bitmap: np.ndarray
     # raw_hash: str  - computable
     # bitmap_hash: str - computable
+    # raw_view: str - computable
 
     @computed_field
     @property
@@ -31,6 +32,7 @@ class Region(BaseModel):
             return "-1"
         return str(hash(str([self.bitmap.flatten(), self.height, self.width])))
 
+    @computed_field
     @property
     def raw_view(self) -> np.ndarray:
         _r = np.full_like(self.bitmap, -1)
@@ -57,8 +59,8 @@ class Region(BaseModel):
         return hash(
             str(
                 [
-                    self.x,
-                    self.y,
+                    # self.x,
+                    # self.y,
                     self.width,
                     self.height,
                     self.raw_hash,

@@ -53,15 +53,15 @@ class TaskSearch:
         while self.q.qsize() != 0:
             _, xnode, ynode = self._get()
 
-            xbags = self.bt.xdag.get_data_by(xnode, "data")
-            ybags = self.bt.ydag.get_data_by(ynode, "data")
+            xbags = self.bt.xdag.get_data_by_attr(xnode, "data")
+            ybags = self.bt.ydag.get_data_by_attr(ynode, "data")
 
-            solved_yet = self.bt.ydag.get_data_by(ynode, "solved_yet")
+            solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
             ind1 = fast11_induction(xbags, ybags, solved_yet)
             ind1 = {}
 
             self.add_solved_yet(ynode, xnode, ind1)
-            if self.bt.ydag.get_data_by(ynode, "solved"):
+            if self.bt.ydag.get_data_by_attr(ynode, "solved"):
                 self.success = True
                 continue
 
@@ -75,7 +75,7 @@ class TaskSearch:
                         new_xnodes.add(xnew)
                     if ynew:
                         new_ynodes.add(ynew)
-                    stop = True
+                    stop = False
 
             self.closed.add(f"{xnode}:{ynode}")
             if len(new_xnodes | new_ynodes) != 0:
@@ -87,8 +87,8 @@ class TaskSearch:
     def put(self, ynodes: set[str], xnodes: set[str]) -> None:
         if len(ynodes) == len(xnodes) == 0:
             return
-        x_lggs = [lgg_prim(self.bt.xdag.get_data_by(n, "data")) for n in xnodes]
-        y_lggs = [lgg_prim(self.bt.ydag.get_data_by(n, "data")) for n in ynodes]
+        x_lggs = [lgg_prim(self.bt.xdag.get_data_by_attr(n, "data")) for n in xnodes]
+        y_lggs = [lgg_prim(self.bt.ydag.get_data_by_attr(n, "data")) for n in ynodes]
 
         dists = np.ravel(pairwise_dists(x_lggs, y_lggs))
         pairs = list(product(xnodes, ynodes))
@@ -97,7 +97,7 @@ class TaskSearch:
 
     def add_solved_yet(self, ynode: str, refnode: str, to_add: dict) -> None:
         "Make sortof `left join` for two dicts with possible nested dicts."
-        solved_yet = self.bt.ydag.get_data_by(ynode, "solved_yet")
+        solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
         for k, v in to_add.items():
             if k not in solved_yet:
                 solved_yet[k] = {"op": v, "ref": refnode}
