@@ -1,22 +1,27 @@
-from itertools import product
+import logging
+from collections import defaultdict
+from itertools import product, zip_longest
 from queue import PriorityQueue
 
 import numpy as np
 
+import search.actions as A
 from datasets.arc import RawTaskData
 from reprs.primitives import Bag
 from search.distances import dict_keys_dist, pairwise_dists
-from search.graph import BiDAG, make_dump_regions
-from search.inductions import fast11_induction
+from search.graph import BiDAG
 from search.lgg import lgg_prim
 
 
 class TaskSearch:
     def __init__(self, task: RawTaskData) -> None:
+        self.logger = logging.getLogger("app.search")
         self.task = task
         self.success = False
         self.q = PriorityQueue()
         self.closed = set()
+        self.xclosed: dict[str, A.ExtractAction] = defaultdict(set)
+        self.yclosed: dict[str, A.ExtractAction] = defaultdict(set)
         self.opened = set()
         self.bt = BiDAG()
 
@@ -29,53 +34,65 @@ class TaskSearch:
 
     def _get(self) -> tuple[float, str, str]:
         dist, pair = self.q.get()
+        self.logger.debug("get search node %s", (dist, pair))
         return dist, *pair.split(":")
 
     def _init_search(self) -> None:
-        x_bags, x_hashes = make_dump_regions(self.task.train_x)
-        x_test_bags, x_test_hashes = make_dump_regions(self.task.test_x)
-        y_bags, y_hashes = make_dump_regions(self.task.train_y)
+        make_dump_regions = A.ExtractAction(name=A.Extractors.ER, c=1, bg=-1)
         self.bt.xdag.add_node(
             "0",
-            data=x_bags,
-            hashes=x_hashes,
-            test_data=x_test_bags,
-            test_hashes=x_test_hashes,
+            parent="",
+            data=tuple(map(make_dump_regions, self.task.train_x)),
+            test_data=tuple(map(make_dump_regions, self.task.test_x)),
         )
         self.bt.ydag.add_node(
-            "0", data=y_bags, hashes=y_hashes, solved_yet={}, solved=False
+            "0",
+            parent="",
+            data=tuple(map(make_dump_regions, self.task.train_y)),
+            solved_yet={},
+            solved=False,
         )
-        self._put("0", "0", 0)
+        self.put({"0"}, {"0"})
 
     def search_topdown(self) -> None:
         self._init_search()
-        stop = False
         while self.q.qsize() != 0:
+            self.logger.debug("q size %s", self.q.qsize())
             _, xnode, ynode = self._get()
+            xclos, yclos = self.xclosed[xnode], self.yclosed[ynode]
+            xbags, ybags, xtest_bags = self.bt.get_bags(xnode, ynode)
 
-            xbags = self.bt.xdag.get_data_by_attr(xnode, "data")
-            ybags = self.bt.ydag.get_data_by_attr(ynode, "data")
+            # solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
+            # ind1 = fast11_induction(xbags, ybags, solved_yet)
+            # self.add_solved_yet(ynode, xnode, ind1)
 
-            solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
-            ind1 = fast11_induction(xbags, ybags, solved_yet)
-            ind1 = {}
+            # if self.bt.ydag.get_data_by_attr(ynode, "solved"):
+            #     self.success = True
+            #     continue
 
-            self.add_solved_yet(ynode, xnode, ind1)
-            if self.bt.ydag.get_data_by_attr(ynode, "solved"):
-                self.success = True
-                continue
-
+            xposib_acts = A.possible_actions(xbags) - xclos
+            yposib_acts = A.possible_actions(ybags) - yclos
             new_ynodes = set()
             new_xnodes = set()
-            if not stop:
-                for c, bg in product([1, 2], [-1, 0]):
-                    xnew = self.bt.add_topdown_x(xnode, c, bg)
-                    ynew = self.bt.add_topdown_y(ynode, c, bg)
-                    if xnew:
-                        new_xnodes.add(xnew)
-                    if ynew:
-                        new_ynodes.add(ynew)
-                    stop = False
+
+            for xa, ya in zip_longest(xposib_acts, yposib_acts):
+                if xa:
+                    newx_bags = A.extract_flat(xa, xbags)
+                    newxtest_bags = A.extract_flat(xa, xtest_bags)
+                    x_newname = self.bt.xdag.add_node(
+                        xa, xnode, newx_bags, test_data=newxtest_bags, action=xa
+                    )
+                    if x_newname:
+                        new_xnodes.add(x_newname)
+                    self.xclosed[xnode].add(xa)
+                if ya:
+                    newy_bags = A.extract_flat(ya, ybags)
+                    y_newname = self.bt.ydag.add_node(
+                        ya, ynode, newy_bags, solved=False, solved_yet={}, action=ya
+                    )
+                    if y_newname:
+                        new_ynodes.add(y_newname)
+                    self.yclosed[ynode].add(ya)
 
             self.closed.add(f"{xnode}:{ynode}")
             if len(new_xnodes | new_ynodes) != 0:
@@ -93,7 +110,9 @@ class TaskSearch:
         dists = np.ravel(pairwise_dists(x_lggs, y_lggs))
         pairs = list(product(xnodes, ynodes))
         for d, (xnode, ynode) in zip(dists, pairs):
+            self.logger.debug("put %s %s %s", d, xnode, ynode)
             self._put(xnode, ynode, d)
+            self.logger.debug("put search node %s", (xnode, ynode, d))
 
     def add_solved_yet(self, ynode: str, refnode: str, to_add: dict) -> None:
         "Make sortof `left join` for two dicts with possible nested dicts."
