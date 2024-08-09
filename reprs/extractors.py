@@ -3,17 +3,6 @@ from skimage.measure import label
 
 from reprs.primitives import Bag, Region
 
-# def extract_bags_from_raw(f, data: list[np.ndarray], c: int, bg: int) -> list[Bag]:
-#     bags = []
-#     for x in data:
-#         h = {}
-#         b = f(x, h, c, bg)
-#         if len(b.regions) > 0:
-#             bags.append(b)
-#         else:
-#             raise NotImplementedError("Check consistnecy.")
-#     return bags
-
 
 def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
     if c == -1:  # no connectivity, return 1-pixel components
@@ -27,9 +16,6 @@ def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
 
 
 def extract_regions(data: np.ndarray, c: int, bg: int) -> Bag:
-    # remove background, cut full regions
-    # if bg not in data or bg == -1 or c == -1:
-    # raise ValueError("Consistency error. Impossible action.")
     mask = np.full_like(data, -1)
     mask[(data != bg) & (data != -1)] = 1
     comps, ncomps = _label(mask, c, -1)
@@ -42,7 +28,7 @@ def extract_regions(data: np.ndarray, c: int, bg: int) -> Bag:
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
 
         _d = data[xmin : xmax + 1, ymin : ymax + 1]
-        _b = np.ones_like(_d)
+        _b = np.full_like(_d, True, dtype=bool)
         r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
         regions.append(r)
     return Bag(regions=regions, length=len(regions))
@@ -59,8 +45,7 @@ def extract_prims(data: np.ndarray, c: int, bg: int) -> Bag:
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
 
         _d = data[xmin : xmax + 1, ymin : ymax + 1]
-        _b = np.full_like(_d, -1)
-        _b[_mask[xmin : xmax + 1, ymin : ymax + 1]] = 1
+        _b = _mask[xmin : xmax + 1, ymin : ymax + 1]
         r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
         regions.append(r)
     return Bag(regions=regions, length=len(regions))

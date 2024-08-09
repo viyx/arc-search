@@ -9,13 +9,14 @@ import search.actions as A
 from datasets.arc import RawTaskData
 from reprs.primitives import Bag
 from search.distances import dict_keys_dist, pairwise_dists
-from search.graph import BiDAG
+from search.graph import BiDag
 from search.lgg import lgg_prim
 
 
 class TaskSearch:
     def __init__(self, task: RawTaskData) -> None:
         self.logger = logging.getLogger("app.search")
+        self.bt = BiDag()
         self.task = task
         self.success = False
         self.q = PriorityQueue()
@@ -23,7 +24,6 @@ class TaskSearch:
         self.xclosed: dict[str, A.ExtractAction] = defaultdict(set)
         self.yclosed: dict[str, A.ExtractAction] = defaultdict(set)
         self.opened = set()
-        self.bt = BiDAG()
 
     def _put(self, xnode: str, ynode: str, dist: float) -> None:
         pair = f"{xnode}:{ynode}"
@@ -57,7 +57,12 @@ class TaskSearch:
     def search_topdown(self) -> None:
         self._init_search()
         while self.q.qsize() != 0:
-            self.logger.debug("q size %s", self.q.qsize())
+            self.logger.debug(
+                "size(q, x, y) = (%s, %s, %s)",
+                self.q.qsize(),
+                self.bt.xdag.g.number_of_nodes(),
+                self.bt.ydag.g.number_of_nodes(),
+            )
             _, xnode, ynode = self._get()
             xclos, yclos = self.xclosed[xnode], self.yclosed[ynode]
             xbags, ybags, xtest_bags = self.bt.get_bags(xnode, ynode)

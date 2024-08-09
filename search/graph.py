@@ -57,7 +57,7 @@ class DAG:
         return self.g.nodes[node][attr]
 
 
-class BiDAG:
+class BiDag:
     def __init__(self) -> None:
         self.xdag = DAG()
         self.ydag = DAG()

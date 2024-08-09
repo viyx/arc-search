@@ -41,8 +41,7 @@ class Region(pydantic.BaseModel):
     @cached_property
     def raw_view(self) -> np.ndarray:
         _r = np.full_like(self.mask, -1)
-        _m = self.mask != -1
-        _r[_m] = self.raw[_m]
+        _r[self.mask] = self.raw[self.mask]
         return _r
 
     @property
@@ -55,15 +54,16 @@ class Region(pydantic.BaseModel):
 
     @classmethod
     def blank(cls) -> dict:
+        raise NotImplementedError()
         # no raw
-        return {
-            "x": "UND",
-            "y": "UND",
-            "width": "UND",
-            "height": "UND",
-            "mask_hash": "UND",
-            "raw_view_hash": "UND",
-        }
+        # return {
+        #     "x": "UND",
+        #     "y": "UND",
+        #     "width": "UND",
+        #     "height": "UND",
+        #     "mask_hash": "UND",
+        #     "raw_view_hash": "UND",
+        # }
 
     @property
     def target_fields(self) -> set[str]:
@@ -115,6 +115,18 @@ class Region(pydantic.BaseModel):
             raise ValueError("Mask doesn't match with content.")
         return data
 
+    # def pseudo_entropy(self) -> float:
+    #     bm = self.mask_binary
+    #     maskp = bm / bm.size
+    #     maskent = maskp * np.log2(maskp)
+    #     raw_ent = 0
+    #     if not self.is_primitive:
+    #         flat = self.raw_view[bm].flatten()
+    #         np.bincount
+    #         self.colors
+    #
+    # return maskent + raw_ent
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -128,7 +140,6 @@ class Bag(pydantic.BaseModel):
     #  length : int
 
     @pydantic.computed_field
-    @property
     def length(self) -> int:
         return len(self.regions)
 
