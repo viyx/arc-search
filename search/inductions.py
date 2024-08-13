@@ -1,6 +1,6 @@
 from typing import Hashable
 
-from reprs.primitives import Bag, Region
+from reprs.primitives import Bag, Region, TaskBag
 from search.lgg import lgg_prim
 
 
@@ -82,3 +82,10 @@ def find_maps_rels(
             if o2o:
                 maps[f] = o2o
     return maps
+
+
+def induction(data: TaskBag):
+    metaf = data.xyup2()
+    if all(metaf["x"]) and all(metaf["y"]) and all(metaf["mask_hash"]):
+        # classification
+        pass

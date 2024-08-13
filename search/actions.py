@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from reprs.extractors import extract_prims, extract_regions
-from reprs.primitives import Bag
+from reprs.primitives import Bag, BBag
 
 BG = {0, -1}
 CONNECTIVITY = {1, 2, -1}
@@ -41,31 +41,31 @@ class ExtractAction(BaseModel):
         return hash(str([self.name, self.bg, self.c]))
 
 
-def possible_actions(bags: list[Bag]) -> set[ExtractAction]:
+def possible_actions(bbag: BBag) -> set[ExtractAction]:
     p_actions = set()
-    colors = set(c for b in bags for c in b.colors)
-    all_primitive = all(b.all_primitive for b in bags)
+    # colors = set(c for b in bbag.bags for c in b.unq_colors)
+    # all_primitive = all(b.all_primitive for b in bbag.bags)
     for b, c in product(BG, CONNECTIVITY):
-        if b == -1:
-            if all_primitive:
-                continue
-        else:
-            if b not in colors:
-                continue
+        # if b == -1:  # no
+        # if all_primitive:
+        # continue
+        # else:
+        # if b not in colors:  # useless background
+        # continue
         p_actions.add(ExtractAction(name=Extractors.ER, c=c, bg=b))
         p_actions.add(ExtractAction(name=Extractors.EP, c=c, bg=b))
     return p_actions
 
 
 @lru_cache
-def extract_flat(action: ExtractAction, bags: tuple[Bag]) -> tuple[Bag]:
+def extract_flat(action: ExtractAction, bbag: BBag) -> list[Bag]:
     "Extract bag for each region -> flatten -> merge -> return."
     new_bags = []
-    for b in bags:
+    for b in bbag.bags:
         _bags = []
         for r in b.regions:
             rbags = action(data=r.raw_view)
             _bags.append(rbags)
         bag = Bag.merge(_bags)
         new_bags.append(bag)
-    return tuple(new_bags)
+    return new_bags

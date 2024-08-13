@@ -17,12 +17,12 @@ def _init_logging(level: str) -> None:
     _logger.setLevel(level.upper())
     console_handler = logging.StreamHandler()
     console_handler.setLevel("ERROR")
-    fname = strftime("./logs/%m_%d_%Y/app_%H_%M.log")
+    fname = strftime("./logs/%m_%d_%Y/app_%H_%M_%S.log")
     if not os.path.exists(os.path.dirname(fname)):
         os.makedirs(os.path.dirname(fname))
     file_handler = logging.FileHandler(fname, mode="a", encoding="utf-8")
     formatter = logging.Formatter(
-        "%(asctime)s.%(msecs)03d - %(levelname)s - %(message)s",
+        "%(asctime)s.%(msecs)03d - %(levelname)s: %(name)s - %(message)s",
         datefmt="%H:%M:%S",
     )
     console_handler.setFormatter(formatter)
