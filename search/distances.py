@@ -41,7 +41,7 @@ def dl(xbags: list[Bag], ybags: list[Bag]) -> int:
     for _x, _y in zip(xbags, ybags):
         xsymbols = _x.soup_of_props
         for r in _y.regions:
-            if r.raw_view_hash in xsymbols:
+            if r.color_hash in xsymbols:
                 continue
             if r.mask_hash in xsymbols:
                 desc_len += len(r.unq_colors)  # recolor

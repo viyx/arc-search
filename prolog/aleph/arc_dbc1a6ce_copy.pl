@@ -5,18 +5,25 @@
 :- aleph_set(check_redundant,true).
 :- aleph_set(clauselength,4).
 :- aleph_set(clauses,3).
+% :- aleph_set(tree_type,classification).
+% :- aleph_set(construct_bottom,reduction).
 
-:- modeh(3,outp(+nn,+nn,#color,+ii)).
+:- modeh(*,outp(+nn,#color,+ii)).
+:- modeh(*,outp(+nn,+color,+ii)).
+% :- modeh(3,outp(+color,+ii)).
+% :- modeh(3,outp(-color,+ii)).
 :- modeb(*,inp(-nn,+nn,#color,-ii)).
 :- modeb(*,inp(+nn,-nn,#color,-ii)).
+% :- modeb(*,inp(+nn,-nn,+color,-ii)).
+% :- modeb(*,inp(+nn,-nn,-color,-ii)).
 :- modeb(*,btw(+nn,+nn,+nn)).
 :- modeb(*,plus1(+nn,+nn)).
 :- modeb(*,minus1(+nn,+nn)).
 
-:- determination(outp/4,inp/4).
-:- determination(outp/4,btw/3).
-:- determination(outp/4,plus1/2).
-:- determination(outp/4,minus1/2).
+:- determination(outp/3,inp/4).
+:- determination(outp/3,btw/3).
+:- determination(outp/3,plus1/2).
+:- determination(outp/3,minus1/2).
 :-begin_bg.
 
 btw(A,B,C):-
@@ -33,11 +40,13 @@ minus1(A,B):-
 % type definitions
 color('8').
 color('1').
+color('3').
 
 ii(1).
 ii(2).
 ii(3).
 ii(4).
+ii(5).
 
 nn(0).
 nn(1).
@@ -62,43 +71,51 @@ inp(0,3,'1',1).
 inp(1,8,'1',1).
 inp(4,1,'1',1).
 inp(4,7,'1',1).
-inp(6,1,'1',1).
-inp(8,6,'1',1).
-inp(9,3,'1',1).
-inp(0,4,'1',2).
-inp(0,9,'1',2).
-inp(2,4,'1',2).
-inp(2,8,'1',2).
-inp(3,2,'1',2).
-inp(7,0,'1',2).
-inp(7,7,'1',2).
-inp(9,6,'1',2).
-inp(0,6,'1',3).
-inp(0,11,'1',3).
-inp(2,10,'1',3).
-inp(4,5,'1',3).
-inp(5,1,'1',3).
-inp(5,9,'1',3).
-inp(6,6,'1',3).
-inp(6,10,'1',3).
-inp(7,2,'1',3).
-inp(9,4,'1',3).
-inp(9,8,'1',3).
-inp(11,4,'1',3).
-inp(11,8,'1',3).
-inp(0,1,'1',4).
-inp(0,4,'1',4).
-inp(2,4,'1',4).
-inp(2,6,'1',4).
-inp(3,0,'1',4).
-inp(4,5,'1',4).
-inp(5,2,'1',4).
-inp(5,7,'1',4).
-inp(7,0,'1',4).
+% inp(6,1,'1',1).
+% inp(8,6,'1',1).
+% inp(9,3,'1',1).
+% inp(0,4,'1',2).
+% inp(0,9,'1',2).
+% inp(2,4,'1',2).
+% inp(2,8,'1',2).
+% inp(3,2,'1',2).
+% inp(7,0,'1',2).
+% inp(7,7,'1',2).
+% inp(9,6,'1',2).
+% inp(0,6,'1',3).
+% inp(0,11,'1',3).
+% inp(2,10,'1',3).
+% inp(4,5,'1',3).
+% inp(5,1,'1',3).
+% inp(5,9,'1',3).
+% inp(6,6,'1',3).
+% inp(6,10,'1',3).
+% inp(7,2,'1',3).
+% inp(9,4,'1',3).
+% inp(9,8,'1',3).
+% inp(11,4,'1',3).
+% inp(11,8,'1',3).
+% inp(0,1,'1',4).
+% inp(0,4,'1',4).
+% inp(2,4,'1',4).
+% inp(2,6,'1',4).
+% inp(3,0,'1',4).
+% inp(4,5,'1',4).
+% inp(5,2,'1',4).
+% inp(5,7,'1',4).
+% inp(7,0,'1',4).
 :-end_bg.
 
 :-begin_in_pos.
-outp(0,3,'1',1).
+outp(1,'1',1).
+outp(1,'8',2).
+outp(1,'8',2).
+outp(1,'8',3).
+% outp('8',4).
+% outp('8',3).
+% outp('1',3).
+:-end_in_pos.
+% outp(0,3,'1',1).
 % outp(1,3,'8',1).
 % outp(1,8,'1',1).
 % outp(2,3,'8',1).
@@ -202,7 +219,7 @@ outp(0,3,'1',1).
 % outp(5,7,'1',4).
 % outp(6,0,'8',4).
 % outp(7,0,'1',4).
-:-end_in_pos.
+% :-end_in_pos.
 
 % :-begin_in_neg.
 % outp(7,0,'1',5).
@@ -322,31 +339,31 @@ outp(0,3,'1',1).
 % o1(X,Y,'8',I):-inp(X1,Y,'1',I),inp(X2,Y,'1',I),btw(X1,X2,X).
 
 
-flatten_body((A, B), Atoms) :- 
-    flatten_body(A, AtomsA),   % Recursively flatten the left part
-    flatten_body(B, AtomsB),   % Recursively flatten the right part
-    append(AtomsA, AtomsB, Atoms).  % Combine the results
-flatten_body(A, [A]) :- 
-    A \= (_, _).  % Base case: A is a single atom, not a conjunction
+% flatten_body((A, B), Atoms) :- 
+%     flatten_body(A, AtomsA),   % Recursively flatten the left part
+%     flatten_body(B, AtomsB),   % Recursively flatten the right part
+%     append(AtomsA, AtomsB, Atoms).  % Combine the results
+% flatten_body(A, [A]) :- 
+%     A \= (_, _).  % Base case: A is a single atom, not a conjunction
 
-% Helper predicate to check if any element in a list does not satisfy cond/1
-check_any_not_cond(Head, [H|_]) :-
-    \+ check_io(Head, H),  % If the head does not satisfy the condition, succeed
-    !.           % Cut to prevent backtracking once a non-satisfying condition is found
-check_any_not_cond(Head,[_|T]) :-
-    check_any_not_cond(Head, T).  % Otherwise, check the rest of the list
+% % Helper predicate to check if any element in a list does not satisfy cond/1
+% check_any_not_cond(Head, [H|_]) :-
+%     \+ check_io(Head, H),  % If the head does not satisfy the condition, succeed
+%     !.           % Cut to prevent backtracking once a non-satisfying condition is found
+% check_any_not_cond(Head,[_|T]) :-
+%     check_any_not_cond(Head, T).  % Otherwise, check the rest of the list
 
-prune((Head :- Body)) :-
-    flatten_body(Body, Atoms),  % Flatten the body into a list of atoms
-    check_any_not_cond(Head,Atoms). 
+% prune((Head :- Body)) :-
+%     flatten_body(Body, Atoms),  % Flatten the body into a list of atoms
+%     check_any_not_cond(Head,Atoms). 
 
-check_io(Head, BodyElement):-
-    ((functor(BodyElement,inp,IA), arg(IA,BodyElement,I2))
-    -> 
-        current_predicate(outp/OA),
-        arg(OA,Head,I1),
-        I1==I2
-    ;
-    true
-    ).
+% check_io(Head, BodyElement):-
+%     ((functor(BodyElement,inp,IA), arg(IA,BodyElement,I2))
+%     -> 
+%         current_predicate(outp/OA),
+%         arg(OA,Head,I1),
+%         I1==I2
+%     ;
+%     true
+%     ).
     

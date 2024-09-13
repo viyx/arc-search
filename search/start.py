@@ -3,26 +3,26 @@ from collections import defaultdict
 from itertools import product, zip_longest
 from queue import PriorityQueue
 
-import numpy as np
-
 import search.actions as A
 from datasets.arc import RawTaskData
-from reprs.primitives import Bag, BBag, TaskBag
-from search.distances import dict_keys_dist, dl
+from reprs.primitives import BBag, Region, TaskBag
+from search.distances import dl
 from search.graph import BiDag
+from search.inductions import Answer, exec_meta
 
 
 class TaskSearch:
     def __init__(self, task: RawTaskData) -> None:
         self.logger = logging.getLogger("app.search")
-        self.bt = BiDag()
+        self.load_testy = True  # check in self.task
+        self.bd = BiDag()
         self.task = task
         self.success = False
         self.q = PriorityQueue()
         self.closed = set()
+        self.opened = set()
         self.xclosed: dict[str, A.ExtractAction] = defaultdict(set)
         self.yclosed: dict[str, A.ExtractAction] = defaultdict(set)
-        self.opened = set()
 
     def _put(self, xnode: str, ynode: str, dist: float) -> None:
         pair = f"{xnode}:{ynode}"
@@ -38,61 +38,77 @@ class TaskSearch:
 
     def _init_search(self) -> None:
         make_dump_regions = A.ExtractAction(name=A.Extractors.ER, c=1, bg=-1)
-        self.bt.xdag.try_add_node(
-            "0",
+        xnode = self.bd.xdag.try_add_node(
+            make_dump_regions,
             parent="",
-            bbag=BBag(bags=list(map(make_dump_regions, self.task.train_x))),
-            test_data=BBag(bags=list(map(make_dump_regions, self.task.test_x))),
+            bbag=BBag(bbags=tuple(map(make_dump_regions, self.task.train_x))),
+            test_data=BBag(bbags=tuple(map(make_dump_regions, self.task.test_x))),
         )
-        self.bt.ydag.try_add_node(
-            "0",
+        ynode = self.bd.ydag.try_add_node(
+            make_dump_regions,
             parent="",
-            bbag=BBag(bags=list(map(make_dump_regions, self.task.train_y))),
-            solved_yet={},
-            solved=False,
+            bbag=BBag(bbags=tuple(map(make_dump_regions, self.task.train_y))),
+            test_data=BBag(bbags=tuple(map(make_dump_regions, self.task.test_y)))
+            if self.load_testy
+            else None,
+            sofar=Answer(Region.main_props()),
         )
-        self.put({"0"}, {"0"})
+        self.put({xnode}, {ynode})
 
     def search_topdown(self) -> None:
         self._init_search()
-        while self.q.qsize() != 0:
+        while self.q.qsize() != 0 or self.success:
             self.logger.debug(
                 "size(q, x, y) = (%s, %s, %s)",
                 self.q.qsize(),
-                self.bt.xdag.g.number_of_nodes(),
-                self.bt.ydag.g.number_of_nodes(),
+                self.bd.xdag.g.number_of_nodes(),
+                self.bd.ydag.g.number_of_nodes(),
             )
             _, xnode, ynode = self._get()
+            tbag = TaskBag.from_tuple(self.bd.get_bags(xnode, ynode))
+            answer = self.bd.ydag.get_data_by_attr(ynode, "sofar")
+
+            exec_meta(tbag, answer)
+
+            # if not answer.empty:
+            #     self.add_solved_sofar(ynode, xnode, answer)
+            #     if self.bd.ydag[ynode][""]:
+            #         self.logger.info("solved")
+            #         self.success = True
+            #         continue
+
             xclos, yclos = self.xclosed[xnode], self.yclosed[ynode]
-            tbag = TaskBag.from_tuple(self.bt.get_bags(xnode, ynode, True))
-
-            # solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
-            # ind1 = fast11_induction(xbags, ybags, solved_yet)
-            # self.add_solved_yet(ynode, xnode, ind1)
-
-            # if self.bt.ydag.get_data_by_attr(ynode, "solved"):
-            #     self.success = True
-            #     continue
-
             xposib_acts = A.possible_actions(tbag.x) - xclos
             yposib_acts = A.possible_actions(tbag.y) - yclos
+            prev_acts = self.bd.ydag.get_actions_upstream(ynode)
+            if yposib_acts and any(a.bg != -1 for a in prev_acts):
+                yposib_acts = A.exclude_bg_actions(yposib_acts)
             new_ynodes = set()
             new_xnodes = set()
 
             for xa, ya in zip_longest(xposib_acts, yposib_acts):
                 if xa:
-                    newx_bbag = BBag(bags=A.extract_flat(xa, tbag.x))
-                    newxtest_bbag = BBag(bags=A.extract_flat(xa, tbag.test))
-                    x_newname = self.bt.xdag.try_add_node(
-                        xa, xnode, newx_bbag, test_data=newxtest_bbag, action=xa
+                    newx_bbag = BBag(bbags=A.extract_flat(xa, tbag.x))
+                    newxtest_bbag = BBag(bbags=A.extract_flat(xa, tbag.x_test))
+                    x_newname = self.bd.xdag.try_add_node(
+                        xa, xnode, newx_bbag, test_data=newxtest_bbag
                     )
                     if x_newname:
                         new_xnodes.add(x_newname)
                     self.xclosed[xnode].add(xa)
                 if ya:
-                    newy_bbag = BBag(bags=A.extract_flat(ya, tbag.y))
-                    y_newname = self.bt.ydag.try_add_node(
-                        ya, ynode, newy_bbag, solved=False, solved_yet={}, action=ya
+                    newy_bbag = BBag(bbags=A.extract_flat(ya, tbag.y))
+                    newytest_bbag = (
+                        BBag(bbags=A.extract_flat(ya, tbag.y_test))
+                        if self.load_testy
+                        else None
+                    )
+                    y_newname = self.bd.ydag.try_add_node(
+                        ya,
+                        ynode,
+                        newy_bbag,
+                        test_data=newytest_bbag,
+                        sofar=Answer(Region.main_props()),
                     )
                     if y_newname:
                         new_ynodes.add(y_newname)
@@ -101,27 +117,13 @@ class TaskSearch:
             self.closed.add(f"{xnode}:{ynode}")
             if len(new_xnodes | new_ynodes) != 0:
                 self.put(
-                    new_ynodes or self.bt.ydag.g.nodes,
-                    new_xnodes or self.bt.xdag.g.nodes,
+                    new_xnodes or self.bd.xdag.g.nodes,
+                    new_ynodes or self.bd.ydag.g.nodes,
                 )
 
-    def put(self, ynodes: set[str], xnodes: set[str]) -> None:
+    def put(self, xnodes: set[str], ynodes: set[str]) -> None:
         for xnode, ynode in product(xnodes, ynodes):
-            xbbag, ybbag, _ = self.bt.get_bags(xnode, ynode)
-            d = dl(xbbag.bags, ybbag.bags)
+            xbbag, ybbag, *_ = self.bd.get_bags(xnode, ynode)
+            d = dl(xbbag.bbags, ybbag.bbags)
             self._put(xnode, ynode, d)
             self.logger.debug("put search node %s", (xnode, ynode, d))
-
-    def add_solved_yet(self, ynode: str, refnode: str, to_add: dict) -> None:
-        "Make sortof `left join` for two dicts with possible nested dicts."
-        solved_yet = self.bt.ydag.get_data_by_attr(ynode, "solved_yet")
-        for k, v in to_add.items():
-            if k not in solved_yet:
-                solved_yet[k] = {"op": v, "ref": refnode}
-            elif isinstance(v, dict):
-                for k2, v2 in v:
-                    if k2 not in solved_yet[k]:
-                        solved_yet[k][k2] = {"op": v2, "ref": refnode}
-        solved = np.isclose(dict_keys_dist(Bag.blank(), solved_yet, ["raw"]), 0)
-        self.bt.ydag.g.nodes[ynode]["solved"] = solved
-        self.bt.ydag.g.nodes[ynode]["solved_yet"] = solved_yet

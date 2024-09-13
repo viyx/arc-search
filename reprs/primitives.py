@@ -1,6 +1,5 @@
-from collections import defaultdict
 from functools import cached_property
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 import pydantic
@@ -31,7 +30,9 @@ class Region(pydantic.BaseModel):
 
     @pydantic.computed_field
     @cached_property
-    def raw_view_hash(self) -> str:
+    def color_hash(self) -> str:
+        if self.is_primitive:
+            return str(list(self.unq_colors)[0])
         return str(hash(str(self.raw_view)))
 
     @pydantic.computed_field
@@ -54,35 +55,33 @@ class Region(pydantic.BaseModel):
     def is_primitive(self) -> bool:
         return len(self.unq_colors) == 1
 
-    @classmethod
-    def blank(cls) -> dict:
-        raise NotImplementedError()
-        # no raw
-        # return {
-        #     "x": "UND",
-        #     "y": "UND",
-        #     "width": "UND",
-        #     "height": "UND",
-        #     "mask_hash": "UND",
-        #     "raw_view_hash": "UND",
-        # }
-
-    @property
-    def target_fields(self) -> set[str]:
-        return self.model_fields_set - {"raw", "mask"}
-
     @cached_property
-    def all_props(self) -> set[Any]:
-        return set(
-            [
-                self.x,
-                self.y,
-                self.width,
-                self.height,
-                self.mask_hash,
-                self.raw_view_hash,
-            ]
-        )
+    def is_rect(self) -> bool:
+        return np.all(self.mask)
+
+    # @classmethod
+    # def blank(cls) -> dict:
+    #     raise NotImplementedError()
+    #     # no raw
+    #     # return {
+    #     #     "x": "UND",
+    #     #     "y": "UND",
+    #     #     "width": "UND",
+    #     #     "height": "UND",
+    #     #     "mask_hash": "UND",
+    #     #     "raw_view_hash": "UND",
+    #     # }
+
+    # @property
+    # def target_fields(self) -> set[str]:
+    #     return self.model_fields_set - {"raw", "mask"}
+
+    @classmethod
+    def main_props(cls) -> set[str]:
+        return {"x", "y", "width", "height", "mask_hash", "color_hash"}
+
+    def dump_main_props(self) -> dict:
+        return self.model_dump(include=self.main_props())
 
     def __hash__(self) -> int:
         return hash(
@@ -90,7 +89,8 @@ class Region(pydantic.BaseModel):
                 [
                     self.x,
                     self.y,
-                    self.raw_view_hash,
+                    self.mask_hash,
+                    self.color_hash,
                 ]
             )
         )
@@ -146,7 +146,7 @@ class Region(pydantic.BaseModel):
 
 
 class Bag(pydantic.BaseModel):
-    regions: list[Region]
+    regions: Sequence[Region]
 
     #
     #  Computed fields
@@ -157,24 +157,35 @@ class Bag(pydantic.BaseModel):
     def length(self) -> int:
         return len(self.regions)
 
-    @property
-    def target_fields(self) -> set[str]:
-        return self.model_fields_set
+    # @property
+    # def target_fields(self) -> set[str]:
+    #     return self.model_fields_set
 
-    @classmethod
-    def blank(cls) -> dict:
-        return {"regions": Region.blank(), "length": "UND"}
+    # @classmethod
+    # def blank(cls) -> dict:
+    #     return {"regions": Region.blank(), "length": "UND"}
 
     @classmethod
     def merge(cls, bags: list["Bag"]) -> "Bag":
         regions = []
         for b in bags:
             regions.extend(b.regions)
-        return Bag(regions=regions)
+        return Bag(regions=tuple(regions))
+
+    def regions_dump_main_props(self) -> tuple[dict]:
+        return tuple(r.dump_main_props() for r in self.regions)
 
     @cached_property
     def all_primitive(self) -> bool:
         return all(r.is_primitive for r in self.regions)
+
+    @cached_property
+    def all_irreducible(self) -> bool:
+        return all(r.mask.shape == (1, 1) for r in self.regions)
+
+    @cached_property
+    def all_rect(self) -> bool:
+        return all(r.is_rect for r in self.regions)
 
     @cached_property
     def unq_colors(self) -> set[int]:
@@ -184,55 +195,50 @@ class Bag(pydantic.BaseModel):
     def soup_of_props(self) -> set[Any]:
         props = set()
         for r in self.regions:
-            props |= r.all_props
+            props |= set(r.dump_main_props().values())
         return props
 
-    @cached_property
-    def get_attr(self, name: str) -> list[Any]:
-        return [getattr(r, name) for r in self.regions]
+    # @cached_property
+    # def get_attr(self, name: str) -> list[Any]:
+    #     return [getattr(r, name) for r in self.regions]
 
     def __hash__(self) -> int:
-        "Hash is indifferent to order of regions."
-        return hash(str(sorted(hash(r) for r in self.regions)))
+        return hash(str([hash(r) for r in self.regions]))
 
 
 class BBag(pydantic.BaseModel):
-    bags: list[Bag]
+    bbags: Sequence[Bag]
 
-    @classmethod
-    def get_hash(cls, bags: list[Bag]) -> int:
-        "Hash is sensitive to order of bags."
-        return hash(str([hash(b) for b in bags]))
+    @cached_property
+    def all_primitive(self) -> bool:
+        return all(b.all_primitive for b in self.bbags)
+
+    # @cached_property
+    # def all_irreducible(self) -> bool:
+    # return all(r.mask.shape == (1, 1) for r in self.regions)
+
+    @cached_property
+    def all_rect(self) -> bool:
+        return all(b.all_rect for b in self.bbags)
+
+    @property
+    def all_ordinary(self) -> bool:
+        return all(len(b.regions) == 1 for b in self.bbags)
 
     def __hash__(self) -> int:
-        "Hash is sensitive to order of bags."
-        return self.get_hash(self.bags)
+        return hash(str([hash(b) for b in self.bbags]))
 
 
 class TaskBag(pydantic.BaseModel):
     x: BBag
     y: BBag
-    test: BBag
+    x_test: BBag
+    y_test: BBag | None
 
     @classmethod
-    def from_tuple(cls, data: tuple[BBag, BBag, BBag]) -> "TaskBag":
-        return cls(x=data[0], y=data[1], test=data[2])
+    def from_tuple(cls, data: tuple[BBag, BBag, BBag, BBag | None]) -> "TaskBag":
+        return cls(x=data[0], y=data[1], x_test=data[2], y_test=data[3])
 
     def __hash__(self) -> int:
-        return hash(str([hash(self.x), hash(self.y), hash(self.test)]))
-
-    def xyup2(self) -> dict:
-        f1 = defaultdict(list)
-        for _x, _y in zip(self.x.bags, self.y.bags):
-            c1 = len(_x) == len(_y)
-            f1["length"].append(c1)
-            if c1:
-                cx = _x.get_attr("x") == _y.get_attr("x")
-                cy = _x.get_attr("y") == _y.get_attr("y")
-                cm = _x.get_attr("mask_hash") == _y.get_attr("mask_hash")
-                cr = _x.get_attr("raw_view_hash") == _y.get_attr("raw_view_hash")
-                f1["x"].append(cx)
-                f1["y"].append(cy)
-                f1["mask_hash"].append(cm)
-                f1["raw_view_hash"].append(cr)
-        return f1
+        # y_test is not included
+        return hash(str([hash(self.x), hash(self.y), hash(self.x_test)]))

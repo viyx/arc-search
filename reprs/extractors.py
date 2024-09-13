@@ -6,7 +6,10 @@ from reprs.primitives import Bag, Region
 
 def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
     if c == -1:  # no connectivity, return 1-pixel components
-        mask = data != bg
+        if data.dtype != bool:
+            mask = data != bg
+        else:
+            mask = data
         ncomps = mask.sum()
         comps = np.full_like(data, -1, dtype=int)
         comps[mask] = np.arange(1, ncomps + 1)
@@ -16,8 +19,8 @@ def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
 
 
 def extract_regions(data: np.ndarray, c: int, bg: int) -> Bag:
-    mask = np.full_like(data, -1)
-    mask[(data != bg) & (data != -1)] = 1
+    "Sensitive only to bg"
+    mask = (data != bg) & (data != -1)
     comps, ncomps = _label(mask, c, -1)
     regions = []
     for i in range(1, ncomps + 1):
@@ -31,7 +34,7 @@ def extract_regions(data: np.ndarray, c: int, bg: int) -> Bag:
         _b = np.full_like(_d, True, dtype=bool)
         r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
         regions.append(r)
-    return Bag(regions=regions, length=len(regions))
+    return Bag(regions=tuple(regions))
 
 
 def extract_prims(data: np.ndarray, c: int, bg: int) -> Bag:
@@ -48,4 +51,4 @@ def extract_prims(data: np.ndarray, c: int, bg: int) -> Bag:
         _b = _mask[xmin : xmax + 1, ymin : ymax + 1]
         r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
         regions.append(r)
-    return Bag(regions=regions, length=len(regions))
+    return Bag(regions=tuple(regions))
