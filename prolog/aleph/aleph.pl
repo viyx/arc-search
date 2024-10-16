@@ -916,14 +916,14 @@ neg_reduce([Head|Body],Neg,Last,DepthTime,Noise,M):-
 	NewLast1 is NewLast - 1,
 	aleph_remove_n(NewLast1,[Head|Body],Prefix,[LastLit|Rest]),
 	mark_lits(Rest,M),
-	insert_lastlit(LastLit,Prefix,Lits1),
+	insert_lastlit(LastLit,Prefix,Lits1,M),
 	neg_reduce(Lits1,Neg,NewLast,DepthTime,Noise,M).
 neg_reduce(_,_,_,_,_,_M).
 
 neg_reduce([],_,_,N,_,_,_,N).
 neg_reduce([L1|Lits],C,TV,N,Neg,ProofFlags,Noise,LastLit,M):-
 	get_pclause([L1],TV,Lit1,TV1,_,_,M),
-	extend_clause(C,Lit1,Clause,M),
+	extend_clause(C,Lit1,Clause),
         prove(ProofFlags,neg,Clause,Neg,NegCover,Count,M),
 	Count > Noise, !,
 	N1 is N + 1,
@@ -10359,7 +10359,7 @@ add_bottom(Bottom,M):-
 		M:example(Num,Type,Example),
 		retract(M:'$aleph_global'(hypothesis,hypothesis(_,_,_,_))),
 		setting(evalfn,Evalfn,M),
-		complete_label(Evalfn,Example,[1,0,1],Label1),
+		complete_label(Evalfn,Example,[1,0,1],Label1,M),
 		asserta(M:'$aleph_global'(hypothesis,hypothesis(Label1,(Example:-true),[Num-Num],[])))).
 
 	

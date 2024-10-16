@@ -18,8 +18,7 @@ def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
         return label(data, return_num=True, background=bg, connectivity=c)
 
 
-def extract_regions(data: np.ndarray, c: int, bg: int) -> Bag:
-    "Sensitive only to bg"
+def extract_regions(data: np.ndarray, bg: int, c: int) -> Bag:
     mask = (data != bg) & (data != -1)
     comps, ncomps = _label(mask, c, -1)
     regions = []

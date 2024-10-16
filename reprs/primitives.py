@@ -1,11 +1,12 @@
+from collections.abc import Sequence
 from functools import cached_property
-from typing import Any, Sequence
+from typing import Any, Hashable
 
 import numpy as np
 import pydantic
 
 
-class Region(pydantic.BaseModel):
+class Region(pydantic.BaseModel, Hashable):
     x: int
     y: int
     raw: np.ndarray  # [0:10]
@@ -14,25 +15,14 @@ class Region(pydantic.BaseModel):
     #
     #  Computed fields:
     #
-    #  height: int
-    #  width: int
+
     #  mask_hash: str
     #  raw_view: np.ndarray
     #  raw_view_hash: str
 
     @pydantic.computed_field
-    def width(self) -> int:
-        return self.raw.shape[1]
-
-    @pydantic.computed_field
-    def height(self) -> int:
-        return self.raw.shape[0]
-
-    @pydantic.computed_field
     @cached_property
     def color_hash(self) -> str:
-        if self.is_primitive:
-            return str(list(self.unq_colors)[0])
         return str(hash(str(self.raw_view)))
 
     @pydantic.computed_field
@@ -48,37 +38,28 @@ class Region(pydantic.BaseModel):
         return _r
 
     @cached_property
-    def unq_colors(self) -> set[int]:
-        return set(np.unique(self.raw_view)) - {-1}
+    def unq_colors(self) -> list[int]:
+        return sorted(set(np.unique(self.raw_view)) - {-1})
 
     @property
-    def is_primitive(self) -> bool:
+    def is_one_colored(self) -> bool:
         return len(self.unq_colors) == 1
 
     @cached_property
     def is_rect(self) -> bool:
         return np.all(self.mask)
 
-    # @classmethod
-    # def blank(cls) -> dict:
-    #     raise NotImplementedError()
-    #     # no raw
-    #     # return {
-    #     #     "x": "UND",
-    #     #     "y": "UND",
-    #     #     "width": "UND",
-    #     #     "height": "UND",
-    #     #     "mask_hash": "UND",
-    #     #     "raw_view_hash": "UND",
-    #     # }
-
-    # @property
-    # def target_fields(self) -> set[str]:
-    #     return self.model_fields_set - {"raw", "mask"}
+    @property
+    def is_primitive(self) -> bool:
+        return self.is_one_colored and self.is_rect
 
     @classmethod
     def main_props(cls) -> set[str]:
-        return {"x", "y", "width", "height", "mask_hash", "color_hash"}
+        return {"x", "y"} | cls.shortcuts_props()
+
+    @classmethod
+    def shortcuts_props(cls) -> set[str]:
+        return {"mask_hash", "color_hash"}
 
     def dump_main_props(self) -> dict:
         return self.model_dump(include=self.main_props())
@@ -104,7 +85,7 @@ class Region(pydantic.BaseModel):
     @classmethod
     def validate_raw_values(cls, v: Any) -> Any:
         if isinstance(v, np.ndarray):
-            if v.dtype != "uint8":
+            if v.dtype != "int8":
                 raise ValueError(f"Unsupported type {v.dtype}.")
             if -1 in np.unique(v):
                 raise ValueError("Content cannot have -1.")
@@ -129,41 +110,28 @@ class Region(pydantic.BaseModel):
             return data
         raise NotImplementedError()
 
-    # def pseudo_entropy(self) -> float:
-    #     bm = self.mask_binary
-    #     maskp = bm / bm.size
-    #     maskent = maskp * np.log2(maskp)
-    #     raw_ent = 0
-    #     if not self.is_primitive:
-    #         flat = self.raw_view[bm].flatten()
-    #         np.bincount
-    #         self.colors
-    #
-    # return maskent + raw_ent
-
     class Config:
         arbitrary_types_allowed = True
 
 
-class Bag(pydantic.BaseModel):
+class Bag(pydantic.BaseModel, Hashable):
     regions: Sequence[Region]
 
-    #
-    #  Computed fields
-    #
-    #  length : int
+    # def __getitem__(self, i: int):
+    #     return self.regions[i]
 
-    @pydantic.computed_field
-    def length(self) -> int:
-        return len(self.regions)
+    # def __len__(self):
+    #     return len(self.regions)
 
-    # @property
-    # def target_fields(self) -> set[str]:
-    #     return self.model_fields_set
+    # def __iter__(self):
+    #     self._it = 0
+    #     return self
 
-    # @classmethod
-    # def blank(cls) -> dict:
-    #     return {"regions": Region.blank(), "length": "UND"}
+    # def __next__(self):
+    #     if self._it < len(self) - 1:
+    #         self._it += 1
+    #         return self[self._it]
+    #     raise StopIteration
 
     @classmethod
     def merge(cls, bags: list["Bag"]) -> "Bag":
@@ -172,12 +140,15 @@ class Bag(pydantic.BaseModel):
             regions.extend(b.regions)
         return Bag(regions=tuple(regions))
 
-    def regions_dump_main_props(self) -> tuple[dict]:
+    def dump_main_props(self) -> tuple[dict]:
         return tuple(r.dump_main_props() for r in self.regions)
 
+    def is_empty(self) -> bool:
+        return len(self.regions) == 0
+
     @cached_property
-    def all_primitive(self) -> bool:
-        return all(r.is_primitive for r in self.regions)
+    def all_one_colored(self) -> bool:
+        return all(r.is_one_colored for r in self.regions)
 
     @cached_property
     def all_irreducible(self) -> bool:
@@ -188,8 +159,8 @@ class Bag(pydantic.BaseModel):
         return all(r.is_rect for r in self.regions)
 
     @cached_property
-    def unq_colors(self) -> set[int]:
-        return set(c for r in self.regions for c in r.unq_colors)
+    def unq_colors(self) -> list[int]:
+        return sorted(set(c for r in self.regions for c in r.unq_colors))
 
     @cached_property
     def soup_of_props(self) -> set[Any]:
@@ -198,47 +169,89 @@ class Bag(pydantic.BaseModel):
             props |= set(r.dump_main_props().values())
         return props
 
-    # @cached_property
-    # def get_attr(self, name: str) -> list[Any]:
-    #     return [getattr(r, name) for r in self.regions]
-
     def __hash__(self) -> int:
-        return hash(str([hash(r) for r in self.regions]))
+        return hash(self.regions)
 
 
-class BBag(pydantic.BaseModel):
-    bbags: Sequence[Bag]
+# class BBag(pydantic.BaseModel):
+#     bags: Sequence[Bag]
 
-    @cached_property
-    def all_primitive(self) -> bool:
-        return all(b.all_primitive for b in self.bbags)
+# @cached_property
+# def all_primitive(self) -> bool:
+#     return all(b.all_primitive for b in self.bags)
 
-    # @cached_property
-    # def all_irreducible(self) -> bool:
-    # return all(r.mask.shape == (1, 1) for r in self.regions)
+# @cached_property
+# def unq_colors(self) -> set[str]:
+#     s = set()
+#     for b in self.bags:
+#         s |= b.unq_colors
+#     return s
 
-    @cached_property
-    def all_rect(self) -> bool:
-        return all(b.all_rect for b in self.bbags)
+# @cached_property
+# def unq_masks(self) -> set[str]:
+#     s = set()
+#     for b in self.bags:
+#         s |= {r.mask_hash for r in b.regions}
+#     return s
+
+# @cached_property
+# def all_rect(self) -> bool:
+#     return all(b.all_rect for b in self.bags)
+
+# @property
+# def all_ordinary(self) -> bool:
+#     return all(len(b.regions) == 1 for b in self.bags)
+
+# def __hash__(self) -> int:
+#     return hash(str([hash(b) for b in self.bags]))
+
+
+# class TaskContainer(pydantic.BaseModel, abc.ABC):
+#     x: Sequence[Sequence]
+#     y: Sequence[Sequence]
+#     x_test: Sequence[Sequence]
+#     y_test: Sequence[Sequence] | None
+
+
+class TaskBags(pydantic.BaseModel, Hashable):
+    x: Sequence[Bag]
+    y: Sequence[Bag]
+    x_test: Sequence[Bag]
+    y_test: Sequence[Bag] | None
+
+    # def __getitem__(self, index: int) -> Sequence[Bag]:
+    #     if index == 0:
+    #         return self.x
+    #     if index == 1:
+    #         return self.y
+    #     if index == 2:
+    #         return self.x_test
+    #     if index == 3 and self.y_test is not None:
+    #         return self.y_test
+    #     raise IndexError()
+
+    # def __len__(self) -> int:
+    #     if self.y_test is None:
+    #         return 3
+    #     return 4
 
     @property
-    def all_ordinary(self) -> bool:
-        return all(len(b.regions) == 1 for b in self.bbags)
-
-    def __hash__(self) -> int:
-        return hash(str([hash(b) for b in self.bbags]))
-
-
-class TaskBag(pydantic.BaseModel):
-    x: BBag
-    y: BBag
-    x_test: BBag
-    y_test: BBag | None
+    def all_bags(self) -> list[Sequence[Bag]]:
+        if self.y_test is not None:
+            return [self.x, self.y, self.x_test, self.y_test]
+        return [self.x, self.y, self.x_test]
 
     @classmethod
-    def from_tuple(cls, data: tuple[BBag, BBag, BBag, BBag | None]) -> "TaskBag":
-        return cls(x=data[0], y=data[1], x_test=data[2], y_test=data[3])
+    def from_tuple(
+        cls, x: tuple[Bag], y: tuple[Bag], x_test: tuple[Bag], y_test: tuple[Bag] | None
+    ) -> "TaskBags":
+        return cls(x=x, y=y, x_test=x_test, y_test=y_test)
+
+    @classmethod
+    def to_dicts(cls, data: Sequence[Bag]) -> Any:
+        return tuple(b.dump_main_props() for b in data)
 
     def __hash__(self) -> int:
-        # y_test is not included
-        return hash(str([hash(self.x), hash(self.y), hash(self.x_test)]))
+        return hash(
+            str([hash(self.x), hash(self.y), hash(self.x_test), hash(self.y_test)])
+        )

@@ -1,21 +1,25 @@
-VAR_CONST = "VAR"
+from collections import defaultdict
+from typing import Iterable
+
+VAR = "VAR"
 
 
 def lgg_dict(data: list[dict]) -> dict:
-    first = data[0]
+    first = data[0].copy()
     for d in data:
         for k in first:
-            if first[k] == d[k]:
+            if first[k] == d[k] and d[k] != VAR:
                 continue
-            first[k] = VAR_CONST
+            first[k] = VAR
     return first
 
 
-# def lgg_region(data: tuple[Region]) -> dict:
-#     return lgg_dict([r.dump_main_props() for r in data])
-
-# def lgg_prim(data: list[Bag | Region]) -> list[dict]:
-#     _l = lgg_dict([r.model_dump() for r in data])
-#     if isinstance(data[0], Bag):
-#         _l["regions"] = lgg_dict(list(lgg_prim(b.regions) for b in data))
-#     return _l
+def lgg_ext(data: Iterable[dict]) -> dict[str,]:
+    res = defaultdict(list)
+    for d in data:
+        for k, v in d.items():
+            res[k].append(v)
+    for k, v in res.items():
+        if len(set(v)) == 1:
+            res[k] = v[0]
+    return dict(res)

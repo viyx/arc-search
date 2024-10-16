@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import json
-from abc import ABC, abstractmethod
+from abc import ABC
 from typing import Iterator
 
 import numpy as np
@@ -9,27 +7,27 @@ import numpy as np
 
 class TaskLayout(ABC):
     @property
-    @abstractmethod
+    # @abstractmethod
     def train_x(self) -> list:
         ...
 
     @property
-    @abstractmethod
+    # @abstractmethod
     def train_y(self) -> list:
         ...
 
     @property
-    @abstractmethod
+    # @abstractmethod
     def train_xy(self) -> Iterator[tuple]:
         ...
 
     @property
-    @abstractmethod
+    # @abstractmethod
     def test_x(self) -> list:
         ...
 
     @property
-    @abstractmethod
+    # @abstractmethod
     def test_y(self) -> list | None:
         ...
 
@@ -91,10 +89,10 @@ class ARCDataset:
         filename = self._task_files[idx]
         with open(filename, encoding="utf-8") as raw:
             data = json.load(raw)
-            train_x = [np.array(d["input"], dtype="uint8") for d in data["train"]]
-            train_y = [np.array(d["output"], dtype="uint8") for d in data["train"]]
-            test_x = [np.array(d["input"], dtype="uint8") for d in data["test"]]
+            train_x = [np.array(d["input"], dtype="int8") for d in data["train"]]
+            train_y = [np.array(d["output"], dtype="int8") for d in data["train"]]
+            test_x = [np.array(d["input"], dtype="int8") for d in data["test"]]
             test_y = None
             if not self._on_submition:
-                test_y = [np.array(d["output"], dtype="uint8") for d in data["test"]]
+                test_y = [np.array(d["output"], dtype="int8") for d in data["test"]]
             return RawTaskData(train_x, train_y, test_x, test_y)

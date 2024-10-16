@@ -1,12 +1,10 @@
 import logging
 from typing import Any
 
-import numpy as np
 from networkx import DiGraph
 
-from reprs.primitives import BBag, Region
-from search.actions import ExtractAction
-from search.distances import dict_keys_dist
+from reprs.primitives import Bag
+from search.actions import Action
 
 
 class DAG:
@@ -31,7 +29,7 @@ class DAG:
 
         return _r(node, attr, [])
 
-    def get_actions_upstream(self, node: str) -> list[ExtractAction]:
+    def get_actions_upstream(self, node: str) -> list[Action]:
         return self._get_values_upstream(node, "action")
 
     def can_add_node(self, content_hash: str) -> bool:
@@ -44,12 +42,28 @@ class DAG:
         return True
 
     def try_add_node(
-        self, action: ExtractAction, parent: str, bbag: BBag, **kwargs
+        self,
+        action: Action,
+        parent: str,
+        bags: tuple[Bag],
+        test_bags: tuple[Bag] | None,
+        **kwargs,
     ) -> str | None:
-        if self.can_add_node(content_hash := hash(bbag)):
+        if any(b.is_empty() for b in bags) or (
+            test_bags and any(b.is_empty() for b in test_bags)
+        ):
+            return None
+        if self.can_add_node(
+            content_hash := hash(str(hash(bags)) + str(hash(test_bags)))
+        ):
             new_name = f"{parent} --> {action}" if parent else str(action)
             self.g.add_node(
-                new_name, data=bbag, content_hash=content_hash, action=action, **kwargs
+                new_name,
+                data=bags,
+                test_data=test_bags,
+                content_hash=content_hash,
+                action=action,
+                **kwargs,
             )
             self.logger.debug("add node %s", new_name)
             if parent:
@@ -60,19 +74,19 @@ class DAG:
     def get_data_by_attr(self, node: str, attr: str) -> Any:
         return self.g.nodes[node][attr]
 
-    def add_solved_yet(self, node: str, refnode: str, to_add: dict) -> None:
-        "Make `left join` for two dicts with possible nested dicts."
-        solved_yet = self.get_data_by_attr(node, "solved_yet")
-        for k, v in to_add.items():
-            if k not in solved_yet:
-                solved_yet[k] = {"op": v, "ref": refnode}
-            elif isinstance(v, dict):
-                for k2, v2 in v:
-                    if k2 not in solved_yet[k]:
-                        solved_yet[k][k2] = {"op": v2, "ref": refnode}
-        solved = np.isclose(dict_keys_dist(Region.blank(), solved_yet, ["raw"]), 0)
-        self.g.nodes[node]["solved"] = solved
-        self.g.nodes[node]["solved_yet"] = solved_yet
+    # def add_solved_yet(self, node: str, refnode: str, to_add: dict) -> None:
+    #     "Make `left join` for two dicts with possible nested dicts."
+    #     solved_yet = self.get_data_by_attr(node, "solved_yet")
+    #     for k, v in to_add.items():
+    #         if k not in solved_yet:
+    #             solved_yet[k] = {"op": v, "ref": refnode}
+    #         elif isinstance(v, dict):
+    #             for k2, v2 in v:
+    #                 if k2 not in solved_yet[k]:
+    #                     solved_yet[k][k2] = {"op": v2, "ref": refnode}
+    #     solved = np.isclose(dict_keys_dist(Region.blank(), solved_yet, ["raw"]), 0)
+    #     self.g.nodes[node]["solved"] = solved
+    #     self.g.nodes[node]["solved_yet"] = solved_yet
 
 
 class BiDag:
@@ -80,9 +94,11 @@ class BiDag:
         self.xdag = DAG()
         self.ydag = DAG()
 
-    def get_bags(self, xnode: str, ynode: str) -> tuple[BBag, BBag, BBag, BBag | None]:
-        xbbag = self.xdag.get_data_by_attr(xnode, "data")
-        xtest_bbag = self.xdag.get_data_by_attr(xnode, "test_data")
-        ybbag = self.ydag.get_data_by_attr(ynode, "data")
-        ytest_bbag = self.ydag.get_data_by_attr(ynode, "test_data")
-        return xbbag, ybbag, xtest_bbag, ytest_bbag
+    def get_bags(
+        self, xnode: str, ynode: str
+    ) -> tuple[tuple[Bag], tuple[Bag], tuple[Bag], tuple[Bag] | None]:
+        xbags = self.xdag.get_data_by_attr(xnode, "data")
+        xtest_bags = self.xdag.get_data_by_attr(xnode, "test_data")
+        ybags = self.ydag.get_data_by_attr(ynode, "data")
+        ytest_bags = self.ydag.get_data_by_attr(ynode, "test_data")
+        return xbags, ybags, xtest_bags, ytest_bags

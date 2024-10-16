@@ -7,9 +7,9 @@ class Answer:
             self._solution[field] = value
 
     @property
-    def need_fields(self) -> set[str]:
+    def target_fields(self) -> set[str]:
         return {k for k, v in self._solution.items() if v is None}
 
     @property
     def success(self) -> bool:
-        return len(self.need_fields) == 0
+        return len(self.target_fields) == 0
