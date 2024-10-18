@@ -22,14 +22,26 @@ class Action(BaseModel):
     def emap(cls) -> dict:
         return {Extractors.EP: extract_prims, Extractors.ER: extract_regions}
 
+    def __lt__(self, other: "Action") -> bool:
+        if self.name != other.name:
+            return self.name < other.name
+        if self.bg != other.bg:
+            return self.bg < other.bg
+        if self.c != other.c:
+            return self.c < other.c
+        return False
+
     def __call__(self, *args: Any, **kw: Any) -> Bag:
         return partial(self.emap()[self.name], c=self.c, bg=self.bg)(*args, **kw)
 
     def __repr__(self) -> str:
-        #  Format `extract_regions,1,0` -> `er(1, 0)`
+        #  Format `extract_regions,1,0` -> `R( 1, 0)`
         i = self.name.index("_")
-        firstletters = self.name[0] + self.name[i + 1]
-        return f"{firstletters}{self.bg, self.c}"
+        # firstletters = self.name[0] + self.name[i + 1]
+        firstletters = self.name[i + 1]
+        bg = " " + str(self.bg) if self.bg != -1 else str(self.bg)
+        c = " " + str(self.c) if self.c != -1 else str(self.c)
+        return f"{firstletters.capitalize()}({bg},{c})"
 
     def __str__(self) -> str:
         return self.__repr__()
@@ -44,10 +56,10 @@ def exclude_nobg_actions(actions: set[Action]) -> set[Action]:
 
 BG = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 CONNECTIVITY = [-1, 1, 2]
-INIT_ACTIONS = {
+INIT_ACTIONS = [
     Action(name=Extractors.ER, bg=-1, c=1),
     Action(name=Extractors.ER, bg=-1, c=2),
-}
+]
 
 
 # def possible_actions(bags: tuple[Bag]) -> set[Action]:
@@ -81,22 +93,20 @@ def next_actions(bags: tuple[Bag]) -> set[Action]:
 
 
 @lru_cache
-def next_actions_r(r: Region) -> frozenset[Action]:
+def next_actions_r(r: Region) -> set[Action]:
     to_pixel = Action(name=Extractors.ER, bg=-1, c=-1)
     if r.mask.shape == (1, 1):  # pixel
         # to void
-        return frozenset([Action(name=Extractors.ER, bg=r.unq_colors[0], c=1)])
+        return set([Action(name=Extractors.ER, bg=r.unq_colors[0], c=1)])
     if r.is_primitive:  # not pixel
         # to void
-        return frozenset(
-            [to_pixel, Action(name=Extractors.ER, bg=r.unq_colors[0], c=1)]
-        )
+        return set([to_pixel, Action(name=Extractors.ER, bg=r.unq_colors[0], c=1)])
     if r.is_one_colored:  # not primitive
         # add Action(name=Extractors.EP, bg=-1, c=1)??
-        # potentially split 8conn-primitive to a few 4conn-primitives
-        # temporary excluded as effect from extraction should be in
-        # graph yet, because 4,8conn are always added together
-        return frozenset(
+        # potentially split 8conn-primitive to a few 4conn-primitives;
+        # temporary excluded as the action should already be in
+        # graph, as 4,8conn are always added together
+        return set(
             [
                 to_pixel,
                 # to void
@@ -113,8 +123,8 @@ def next_actions_r(r: Region) -> frozenset[Action]:
                 continue
             res.add(Action(name=Extractors.ER, bg=color, c=conn))
     res.add(to_pixel)
-    res -= INIT_ACTIONS
-    return frozenset(res)
+    res.discard(set(INIT_ACTIONS))
+    return res
 
 
 @lru_cache

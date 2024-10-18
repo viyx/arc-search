@@ -16,9 +16,9 @@ class Region(pydantic.BaseModel, Hashable):
     #  Computed fields:
     #
 
-    #  mask_hash: str
     #  raw_view: np.ndarray
-    #  raw_view_hash: str
+    #  mask_hash: str
+    #  color_hash: str
 
     @pydantic.computed_field
     @cached_property
@@ -151,7 +151,7 @@ class Bag(pydantic.BaseModel, Hashable):
         return all(r.is_one_colored for r in self.regions)
 
     @cached_property
-    def all_irreducible(self) -> bool:
+    def all_pixels(self) -> bool:
         return all(r.mask.shape == (1, 1) for r in self.regions)
 
     @cached_property

@@ -43,6 +43,14 @@ class TaskMetaFeatures:
         return all(all(r.is_primitive for r in b) for b in self._task.x)
 
     @cached_property
+    def all_y_primitive(self) -> bool:
+        return all(all(r.is_primitive for r in b) for b in self._task.y)
+
+    @cached_property
+    def all_y_pixels(self) -> bool:
+        return all(b.all_pixels for b in self._task.y)
+
+    @cached_property
     def all_xtest_is_primitive(self) -> bool:
         return all(all(r.is_primitive for r in b) for b in self._task.x_test)
 
@@ -94,10 +102,11 @@ class TaskMetaFeatures:
 def exec_meta(task: TaskBags, sofar: Answer) -> None:
     tf = TaskMetaFeatures(task)
 
-    if tf.all_test_str_in_x:
+    if tf.all_test_str_in_x and tf.all_y_pixels:
         a = Aleph(bg=BASE_BG)
         a.write_file(TaskBags.to_dicts(task.x), TaskBags.to_dicts(task.y))
-    pass
+        pass
+
     # a.induce()
     # if a.success:
     # res: list[str] = a.predict(task.x_test)

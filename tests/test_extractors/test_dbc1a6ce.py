@@ -50,7 +50,7 @@ def test_extract(raw: RawTaskData):
         for x in d:
             pixels1 = extract_regions(x, -1, -1)
             # assert len(pixels1.regions) == len(pixels1)
-            assert pixels1.all_irreducible
+            assert pixels1.all_pixels
             assert pixels1.all_rect
             assert pixels1.all_one_colored
             assert len(pixels1.regions) == x.size

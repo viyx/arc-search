@@ -45,6 +45,7 @@ check_io(Head, BodyElement):-
     -> 
         functor(Head,_,OA),
         arg(OA,Head,I1),
+        % last arguments equals
         I1==I2
     ;
     true

@@ -24,20 +24,25 @@ class TaskSearch:
         self.xclosed: dict[str, A.Action] = defaultdict(set)
         self.yclosed: dict[str, A.Action] = defaultdict(set)
 
-    def _put(self, xnode: str, ynode: str, dist: float) -> None:
-        pair = f"{xnode}:{ynode}"
-        t = (dist, pair)
-        if pair not in (self.closed | self.opened):
-            self.q.put(t)
-            self.opened.add(pair)
-
     def _get(self) -> tuple[float, str, str]:
-        dist, pair = self.q.get()
-        self.logger.debug("get search node %s", (dist, pair))
-        return dist, *pair.split(":")
+        dist, x, y = self.q.get()
+        self.logger.debug("get search node %s", (dist, x, y))
+        return dist, x, y
+
+    def _put(self, xnodes: set[str], ynodes: set[str]) -> None:
+        if len(xnodes | ynodes) > 0:
+            xs = set(self.bd.xdag.g.nodes) | xnodes
+            ys = set(self.bd.ydag.g.nodes) | ynodes
+            new_pairs = set(product(xs, ys))
+            new_pairs.discard(self.closed | self.opened)
+            for xnode, ynode in new_pairs:
+                xbags, ybags, *_ = self.bd.get_bags(xnode, ynode)
+                d = dl(xbags, ybags)
+                self.q.put((d, xnode, ynode))
+                self.logger.debug("put search node %s", (xnode, ynode, d))
 
     def _init_search(self) -> None:
-        make_dump_regions = list(A.INIT_ACTIONS)[0]
+        make_dump_regions = A.INIT_ACTIONS[0]
         xnode = self.bd.xdag.try_add_node(
             make_dump_regions,
             parent="",
@@ -53,7 +58,7 @@ class TaskSearch:
             else None,
             # sofar=Answer(Region.main_props()),
         )
-        self.put({xnode}, {ynode})
+        self._put({xnode}, {ynode})
 
     def search_topdown(self) -> None:
         self._init_search()
@@ -68,7 +73,9 @@ class TaskSearch:
             tbag = TaskBags.from_tuple(*self.bd.get_bags(xnode, ynode))
             # answer = self.bd.ydag.get_data_by_attr(ynode, "sofar")
 
-            exec_meta(tbag, None)
+            if xnode == "R(-1, 1) --> P( 0,-1)" and ynode == "R(-1, 1) --> P( 0,-1)":
+                exec_meta(tbag, None)
+                # pass
 
             xclos, yclos = self.xclosed[xnode], self.yclosed[ynode]
             xposib_acts = A.next_actions(tbag.x) - xclos
@@ -79,7 +86,7 @@ class TaskSearch:
             new_ynodes = set()
             new_xnodes = set()
 
-            for xa, ya in zip_longest(xposib_acts, yposib_acts):
+            for xa, ya in zip_longest(sorted(xposib_acts), sorted(yposib_acts)):
                 if xa:
                     newx_bags = A.extract_flat(xa, tbag.x)
                     newxtest_bags = A.extract_flat(xa, tbag.x_test)
@@ -99,23 +106,11 @@ class TaskSearch:
                         ynode,
                         newy_bags,
                         newytest_bags,
-                        # sofar=Answer(Region.main_props()),
                     )
                     if y_newname:
                         new_ynodes.add(y_newname)
                     self.yclosed[ynode].add(ya)
 
-            self.closed.add(f"{xnode}:{ynode}")
-            if len(new_xnodes | new_ynodes) != 0:
-                self.put(
-                    new_xnodes or self.bd.xdag.g.nodes,
-                    new_ynodes or self.bd.ydag.g.nodes,
-                )
+            self.closed.add((xnode, ynode))
+            self._put(new_xnodes, new_ynodes)
         pass
-
-    def put(self, xnodes: set[str], ynodes: set[str]) -> None:
-        for xnode, ynode in product(xnodes, ynodes):
-            xbags, ybags, *_ = self.bd.get_bags(xnode, ynode)
-            d = dl(xbags, ybags)
-            self._put(xnode, ynode, d)
-            self.logger.debug("put search node %s", (xnode, ynode, d))
