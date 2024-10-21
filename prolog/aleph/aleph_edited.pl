@@ -916,14 +916,14 @@ neg_reduce([Head|Body],Neg,Last,DepthTime,Noise,M):-
 	NewLast1 is NewLast - 1,
 	aleph_remove_n(NewLast1,[Head|Body],Prefix,[LastLit|Rest]),
 	mark_lits(Rest,M),
-	insert_lastlit(LastLit,Prefix,Lits1),
+	insert_lastlit(LastLit,Prefix,Lits1,M),
 	neg_reduce(Lits1,Neg,NewLast,DepthTime,Noise,M).
 neg_reduce(_,_,_,_,_,_M).
 
 neg_reduce([],_,_,N,_,_,_,N).
 neg_reduce([L1|Lits],C,TV,N,Neg,ProofFlags,Noise,LastLit,M):-
 	get_pclause([L1],TV,Lit1,TV1,_,_,M),
-	extend_clause(C,Lit1,Clause,M),
+	extend_clause(C,Lit1,Clause),
         prove(ProofFlags,neg,Clause,Neg,NegCover,Count,M),
 	Count > Noise, !,
 	N1 is N + 1,
@@ -2269,8 +2269,8 @@ match_mode(Loc,CLit,M):-
 		M:'$aleph_global'(modeb,modeb(_,Mode))),
         split_args(Mode,Mode,I,O,C,M),
         (Loc = head ->
-		update_atoms(CLit,mode(Mode,O,I,C));
-		update_atoms(CLit,mode(Mode,I,O,C))),
+		update_atoms(CLit,mode(Mode,O,I,C),M);
+		update_atoms(CLit,mode(Mode,I,O,C),M)),
 	fail.
 match_mode(_,_,_M).
 
@@ -2279,8 +2279,8 @@ flatten_matched_atoms(Loc,M):-
         (retract(M:'$aleph_sat'(botsize,BSize))-> true;  BSize = 0),
         (retract(M:'$aleph_sat'(lastlit,Last))-> true ; Last = 0),
         (Loc = head ->
-                flatten(0,IVal,BSize,BSize1);
-                flatten(0,IVal,Last,BSize1)),
+                flatten(0,IVal,BSize,BSize1,M);
+                flatten(0,IVal,Last,BSize1,M)),
         asserta(M:'$aleph_sat'(botsize,BSize1)),
 	(Last < BSize1 -> 
         	asserta(M:'$aleph_sat'(lastlit,BSize1));
@@ -2292,7 +2292,7 @@ flatten_matched_atoms(_,_M).
 integrate_head_lit(HeadOVars,M):-
         example_saturated(Example,M),
 	split_args(Example,_,_,Output,_,M),
-	integrate_args(unknown,Example,Output),
+	integrate_args(unknown,Example,Output,M),
         match_mode(head,Example,M),
 	flatten_matched_atoms(head,M),
         get_ivars1(false,1,HeadOVars,M), !.
@@ -4888,14 +4888,14 @@ induce(M:Program):-
         setting(samplesize,S,M),
 	setting(abduce,Abduce,M),
 	record_settings(M),
-        stopwatch(StartClock),
-        repeat,
-        gen_sample(pos,S,M),
+	stopwatch(StartClock),
+	repeat,
+	gen_sample(pos,S,M),
 
 	retractall(M:'$aleph_global'(besthyp,besthyp(_,_,_,_,_))),
-        asserta(M:'$aleph_global'(besthyp,besthyp([-inf,0,1,-inf],0,(false),[],[]))),
-        get_besthyp(Abduce,M),
-        (setting(gcws,true,M) -> sphyp(M), addgcws(M); addhyp(M)),
+	asserta(M:'$aleph_global'(besthyp,besthyp([-inf,0,1,-inf],0,(false),[],[]))),
+	get_besthyp(Abduce,M),
+	(setting(gcws,true,M) -> sphyp(M), addgcws(M); addhyp(M)),
 	show_atoms_left(M),
 	record_atoms_left(M),
         M:'$aleph_global'(atoms_left,atoms_left(pos,[])),
@@ -10231,7 +10231,7 @@ write_features(M):-
 	write_features(File,M), !.
 write_features(_M).
 
-write_rules(File,M):-
+write_rules(File,M):- 
         aleph_open(File,write,Stream),
         set_output(Stream),
         M:'$aleph_global'(rules,rules(L)),
@@ -10359,7 +10359,7 @@ add_bottom(Bottom,M):-
 		M:example(Num,Type,Example),
 		retract(M:'$aleph_global'(hypothesis,hypothesis(_,_,_,_))),
 		setting(evalfn,Evalfn,M),
-		complete_label(Evalfn,Example,[1,0,1],Label1),
+		complete_label(Evalfn,Example,[1,0,1],Label1,M),
 		asserta(M:'$aleph_global'(hypothesis,hypothesis(Label1,(Example:-true),[Num-Num],[])))).
 
 	

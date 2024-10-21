@@ -1,14 +1,16 @@
+import subprocess
 from itertools import product
 from random import randint
+from time import strftime
 
 from search import lgg
-from search.prolog.bg import BASE_BG_ARGS, NAT_TYPE
+from search.prolog.bg import BASE_BG_ARGS, Argument, Directions, Types
 
 LLD = list[list[dict]]
 
-ALEPH_START = """:- use_module(aleph).
+ALEPH_START = """:- use_module('../aleph').
 :- aleph.
-:- [aleph_prune].
+:- ['../aleph_prune'].
 :- style_check(-discontiguous).
 :- aleph_set(check_redundant,true).
 :- aleph_set(clauselength,6).
@@ -20,14 +22,14 @@ INP_PRED = "inp"
 OUT_PRED = "outp"
 
 
-def make_mode(pred: str, h_or_b: str, types: list[str], n: int | None = None) -> str:
+def make_mode(pred: str, h_or_b: str, args: list[str], n: int | None = None) -> str:
     _n = str(n) if n is not None else "*"
-    return f":- mode{h_or_b}({_n},{pred}({','.join(types)}))."
+    return f":- mode{h_or_b}({_n},{pred}({','.join(args)}))."
 
 
-def gen_facts(data: LLD, pred: str, args: list[str]) -> list[str]:
+def gen_facts(data: LLD, pred: str, args: list[str], start: int = 1) -> list[str]:
     res = []
-    for i, example in enumerate(data, 1):
+    for i, example in enumerate(data, start):
         for o in example:
             args_wquotes = iter(
                 f"'{o[a]}'" if isinstance(o[a], str) else str(o[a]) for a in args
@@ -69,14 +71,17 @@ def gen_neg_facts(data: LLD, pred: str, args: list[str]) -> list[str]:
 
 class Aleph:
     def __init__(self, bg: list[str]):
-        self._outp_args: list[str] = []
-        self._inp_args: list[str] = []
+        self.bg = bg
+        self._outp_args: list[Argument] = []
+        self._outp_attrs: list[str] = []
+        self._inp_args: list[Argument] = []
+        self._inp_attrs: list[str] = []
         self._inp_lgg = None
         self._outp_lgg = None
-        self.bg: list[str] = bg
+        self.inp_facts: list[str] = []
+        self.test_facts: list[str] = []
         self.deters: list[str] = []
         self.modes: list[str] = []
-        self.inp_facts: list[str] = []
         self.pos: list[str] = []
         self.neg: list[str] = []
         self.prolog_prog: str = ""
@@ -89,32 +94,22 @@ class Aleph:
     def inp_consts(self) -> dict:
         return {k: v for k, v in self._inp_lgg.items() if v != lgg.VAR}
 
-    @classmethod
-    def _map_types(
-        cls, d: dict, args: list[str], int_dirs: list[str], other_dirs: list[str]
-    ) -> tuple[list[str], list[str]]:
-        res_types = []
-        res_dirs = []
-        for k in args:
-            if isinstance(d[k], int):
-                res_types.append(f"{NAT_TYPE}")
-                res_dirs.append(int_dirs)
+    def _map_args(self, args: list[Argument]) -> list[list[str]]:
+        args_ext: list[list[Argument]] = []
+        for arg in args:
+            if arg.direction == Directions.INOUT:
+                args_ext.append(
+                    [
+                        Argument(direction=Directions.IN, type=arg.type),
+                        Argument(direction=Directions.OUT, type=arg.type),
+                    ]
+                )
             else:
-                res_types.append(f"{k}")
-                res_dirs.append(other_dirs)
-        return res_types, res_dirs
+                args_ext.append([arg])
 
-    @classmethod
-    def _gen_directions(
-        cls, types: list[str], dirs: list[list[str]]
-    ) -> list[list[str]]:
-        prod = product(*dirs)
         res = []
-        for p in prod:
-            _res = []
-            for d, t in zip(p, types):
-                _res.append(f"{d}{t}")
-            res.append(_res)
+        for arg_list in product(*args_ext):
+            res.append(list(map(str, arg_list)))
         return res
 
     def _add_deter(self, pred: str, arity: int) -> None:
@@ -122,47 +117,64 @@ class Aleph:
             f":- determination({OUT_PRED}/{len(self._outp_args) + 1},{pred}/{arity})."
         )
 
-    def _modes_head(self, outp_sample: dict) -> None:
-        types, dirs = self._map_types(outp_sample, self._outp_args, ["+"], ["#"])
-        out_types = self._gen_directions(types, dirs)[0]
-        self.modes.append(make_mode(OUT_PRED, "h", out_types + [f"+{EXAMPLE_ID_TYPE}"]))
+    def _modes_head(self, sample: dict) -> None:
+        self._outp_attrs = sorted(sample.keys() - self.outp_consts.keys())
+        self._outp_args = self._map_types2args(
+            sample, self._outp_attrs, {"int": Directions.IN, "str": Directions.CONST}
+        )
+        args = self._map_args(self._outp_args)[0]
+        self.modes.append(make_mode(OUT_PRED, "h", args + [f"+{EXAMPLE_ID_TYPE}"]))
 
     def _modes_bg(self) -> None:
         for c in self.bg:
             pred = BASE_BG_ARGS[c]
-            types = [arg.direction + arg.type for arg in pred.args]
-            self.modes.append(make_mode(pred.name, "b", types))
+            for arg_list in self._map_args(pred.args):
+                self.modes.append(make_mode(pred.name, "b", arg_list, 1))
             self._add_deter(pred.name, len(pred.args))
 
-    def _modes_inp(self, inp_sample: dict) -> None:
-        types, dirs = self._map_types(inp_sample, self._inp_args, ["+", "-"], ["#"])
-        types_wdirs = self._gen_directions(types, dirs)
-        for t in types_wdirs:
-            self.modes.append(make_mode(INP_PRED, "b", t + [f"-{EXAMPLE_ID_TYPE}"]))
+    def _modes_inp(self, sample: dict) -> None:
+        self._inp_attrs = sorted(sample.keys() - self.inp_consts.keys())
+        self._inp_args = self._map_types2args(
+            sample, self._inp_attrs, {"int": Directions.INOUT, "str": Directions.CONST}
+        )
+        args = self._map_args(self._inp_args)
+        if len(args) > 1:
+            for arg_list in args:
+                self.modes.append(
+                    make_mode(INP_PRED, "b", arg_list + [f"-{EXAMPLE_ID_TYPE}"])
+                )
+        else:
+            self.modes.append(
+                make_mode(INP_PRED, "b", arg_list + [f"-{EXAMPLE_ID_TYPE}"])
+            )
         self._add_deter(INP_PRED, len(self._inp_args) + 1)
 
-    def _fix_args(self, inputs: LLD, outputs: LLD) -> None:
-        self._inp_args = list(inputs[0][0].keys() - self.inp_consts.keys())
-        self._outp_args = list(outputs[0][0].keys() - self.outp_consts.keys())
+    def _map_types2args(
+        self, sample: dict, keys: set[str], type2dir: dict
+    ) -> list[Argument]:
+        _res = []
+        for k in keys:
+            t = sample[k].__class__.__name__
+            d = type2dir[t]
+            _res.append(Argument(type=Types(t), direction=d))
+        return _res
 
-    def _find_consts(self, inputs: LLD, outputs: LLD) -> None:
+    def _lggs(self, inputs: LLD, outputs: LLD) -> None:
         self._inp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in inputs))
         self._outp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in outputs))
 
-    def _gen_data(self, inputs: LLD, outputs: LLD) -> None:
-        self._find_consts(inputs, outputs)
-        self._fix_args(inputs, outputs)
+    def _gen_data(self, inputs: LLD, outputs: LLD, test: LLD) -> None:
+        self._lggs(inputs, outputs)
         self._modes_head(outputs[0][0])
         self._modes_bg()
         self._modes_inp(inputs[0][0])
-        inp_args = [a for a in self._inp_args if a not in self.inp_consts]
-        self.inp_facts = gen_facts(inputs, INP_PRED, inp_args)
-        outp_args = [a for a in self._outp_args if a not in self.outp_consts]
-        self.pos = gen_facts(outputs, OUT_PRED, outp_args)
-        self.neg = gen_neg_facts(outputs, OUT_PRED, outp_args)
+        self.inp_facts = gen_facts(inputs + test, INP_PRED, self._inp_attrs)
+        # self.test_facts = gen_facts(test, INP_PRED, inp_args, len(inputs)+1)
+        self.pos = gen_facts(outputs, OUT_PRED, self._outp_attrs)
+        self.neg = gen_neg_facts(outputs, OUT_PRED, self._outp_attrs)
 
-    def write_file(self, inputs: LLD, outputs: LLD) -> None:
-        self._gen_data(inputs, outputs)
+    def compose_prog(self, inputs: LLD, outputs: LLD, test: LLD) -> None:
+        self._gen_data(inputs, outputs, test)
         nl = "\n"
         dnl = nl + nl
         self.prolog_prog = f"""{ALEPH_START}
@@ -181,5 +193,36 @@ class Aleph:
 {nl.join(self.neg)}
 :-end_in_neg.
 """
-        with open("prolog/aleph/aleph_test.pl", "w") as al:
-            al.write(self.prolog_prog)
+
+    def run(self, inputs: LLD, outputs: LLD, test: LLD):
+        self.compose_prog(inputs, outputs, test)
+        try:
+            dname = "./prolog/aleph/temp/"
+            fname = strftime("%H_%M_%S.pl")
+
+            with open(dname + fname, "w", encoding="utf-8") as file:
+                file.write(self.prolog_prog)
+
+            with subprocess.Popen(
+                [
+                    "swipl",
+                    "-q",
+                    "-f",
+                    dname + fname,
+                    "-g",
+                    f"induce,aleph:write_rules('{dname}rules.pl','aleph'),halt",
+                ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as process:
+                stdout, stderr = process.communicate(timeout=20)
+
+                if stderr:
+                    print(f"Error: {stderr}")
+                pass
+
+        except subprocess.TimeoutExpired:
+            process.kill()
+            return "Prolog execution timed out."

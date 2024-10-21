@@ -50,3 +50,9 @@ check_io(Head, BodyElement):-
     ;
     true
     ).
+
+assert_facts([]).
+assert_facts([Fact | Rest]) :-
+    assertz(Fact),
+    print(Fact),
+    assert_facts(Rest).

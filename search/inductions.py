@@ -4,7 +4,7 @@ import search.lgg as lgg
 from reprs.primitives import Region, TaskBags
 from search.answer import Answer
 from search.prolog.aleph import Aleph
-from search.prolog.bg import BASE_BG
+from search.prolog.bg import CURRENT_BG
 
 # class LabelEncoder:
 #     def __init__(self):
@@ -103,8 +103,12 @@ def exec_meta(task: TaskBags, sofar: Answer) -> None:
     tf = TaskMetaFeatures(task)
 
     if tf.all_test_str_in_x and tf.all_y_pixels:
-        a = Aleph(bg=BASE_BG)
-        a.write_file(TaskBags.to_dicts(task.x), TaskBags.to_dicts(task.y))
+        a = Aleph(bg=CURRENT_BG)
+        a.run(
+            TaskBags.to_dicts(task.x),
+            TaskBags.to_dicts(task.y),
+            TaskBags.to_dicts(task.x_test),
+        )
         pass
 
     # a.induce()
