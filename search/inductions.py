@@ -104,19 +104,10 @@ def exec_meta(task: TaskBags, sofar: Answer) -> None:
 
     if tf.all_test_str_in_x and tf.all_y_pixels:
         a = Aleph(bg=CURRENT_BG)
-        a.run(
+        res = a.run(
             TaskBags.to_dicts(task.x),
             TaskBags.to_dicts(task.y),
             TaskBags.to_dicts(task.x_test),
         )
-        pass
-
-    # a.induce()
-    # if a.success:
-    # res: list[str] = a.predict(task.x_test)
-    # res =  Bag.from_strings(res)
-    # return res
-    # else:
-    # pass
-    # ConstantSolver().try_solve(None, tf, sofar)
-    # One2OneMapSolver().try_solve(None, tf, sofar)
+        if res:
+            _ = TaskBags.from_dicts(res)

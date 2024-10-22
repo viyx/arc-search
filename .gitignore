@@ -3,5 +3,5 @@ __pycache__
 .vscode
 .DS_store
 logs
-drawings/
+# drawings/
 prolog/aleph/temp

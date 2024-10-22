@@ -173,46 +173,6 @@ class Bag(pydantic.BaseModel, Hashable):
         return hash(self.regions)
 
 
-# class BBag(pydantic.BaseModel):
-#     bags: Sequence[Bag]
-
-# @cached_property
-# def all_primitive(self) -> bool:
-#     return all(b.all_primitive for b in self.bags)
-
-# @cached_property
-# def unq_colors(self) -> set[str]:
-#     s = set()
-#     for b in self.bags:
-#         s |= b.unq_colors
-#     return s
-
-# @cached_property
-# def unq_masks(self) -> set[str]:
-#     s = set()
-#     for b in self.bags:
-#         s |= {r.mask_hash for r in b.regions}
-#     return s
-
-# @cached_property
-# def all_rect(self) -> bool:
-#     return all(b.all_rect for b in self.bags)
-
-# @property
-# def all_ordinary(self) -> bool:
-#     return all(len(b.regions) == 1 for b in self.bags)
-
-# def __hash__(self) -> int:
-#     return hash(str([hash(b) for b in self.bags]))
-
-
-# class TaskContainer(pydantic.BaseModel, abc.ABC):
-#     x: Sequence[Sequence]
-#     y: Sequence[Sequence]
-#     x_test: Sequence[Sequence]
-#     y_test: Sequence[Sequence] | None
-
-
 class TaskBags(pydantic.BaseModel, Hashable):
     x: Sequence[Bag]
     y: Sequence[Bag]
@@ -250,6 +210,16 @@ class TaskBags(pydantic.BaseModel, Hashable):
     @classmethod
     def to_dicts(cls, data: Sequence[Bag]) -> Any:
         return tuple(b.dump_main_props() for b in data)
+
+    @classmethod
+    def from_dicts(cls, data: list[list[dict]]) -> Sequence[Bag]:
+        res = []
+        for b in data:
+            regs = []
+            for r in b:
+                regs.append(Region(**r))
+            res.append(Bag(regions=regs))
+        return res
 
     def __hash__(self) -> int:
         return hash(

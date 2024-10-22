@@ -4,11 +4,13 @@ from pydantic import BaseModel
 
 # NAT_TYPE = "nat"
 # STR_TYPE = "str"
+# EXAMPLE_ID_TYPE = "ei"
 
 
 class Types(str, Enum):
     INT = "int"
     STR = "str"
+    EID = "eid"
 
 
 class Directions(str, Enum):
@@ -81,16 +83,3 @@ BASE_BG_ARGS: dict[str, Predicate] = {
         ],
     ),
 }
-
-
-# def extract_functor(clause: str) -> tuple[str, list[Argument]]:
-#     sig = clause.split(":-")[0]
-#     i1, i2 = sig.index("("), sig.index(")")
-#     pred = sig[:i1]
-#     args = sig[i1 + 1 : i2].split(",")
-#     res = []
-#     for arg in args:
-#         d = arg[0]
-#         _, t = arg[1:].split("_")
-#         res.append(Argument(type=t, direction=d))
-#     return pred, res

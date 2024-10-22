@@ -1,4 +1,8 @@
+import os
+import re
 import subprocess
+from ast import literal_eval
+from collections import defaultdict
 from itertools import product
 from random import randint
 from time import strftime
@@ -8,16 +12,15 @@ from search.prolog.bg import BASE_BG_ARGS, Argument, Directions, Types
 
 LLD = list[list[dict]]
 
-ALEPH_START = """:- use_module('../aleph').
+ALEPH_START = """:- use_module('../../aleph').
 :- aleph.
-:- ['../aleph_prune'].
+:- ['../../aleph_prune'].
 :- style_check(-discontiguous).
 :- aleph_set(check_redundant,true).
 :- aleph_set(clauselength,6).
 """
 
 
-EXAMPLE_ID_TYPE = "ei"
 INP_PRED = "inp"
 OUT_PRED = "outp"
 
@@ -69,6 +72,21 @@ def gen_neg_facts(data: LLD, pred: str, args: list[str]) -> list[str]:
     return res
 
 
+def extract_accuracy(data: str) -> float | None:
+    accuracy = re.search(r"Accuracy\s*=\s*(\d+\.?\d*)", data)
+    if accuracy:
+        return float(accuracy.group(1))
+    return None
+
+
+def extract_max_rule(data: str) -> int | None:
+    rule_ids = re.findall(r"\[Rule (\d+)\]", data)
+    if len(rule_ids) > 0:
+        max_rule_id = max(map(int, rule_ids))
+        return max_rule_id
+    return None
+
+
 class Aleph:
     def __init__(self, bg: list[str]):
         self.bg = bg
@@ -85,6 +103,7 @@ class Aleph:
         self.pos: list[str] = []
         self.neg: list[str] = []
         self.prolog_prog: str = ""
+        self.success = False
 
     @property
     def outp_consts(self) -> dict:
@@ -114,7 +133,7 @@ class Aleph:
 
     def _add_deter(self, pred: str, arity: int) -> None:
         self.deters.append(
-            f":- determination({OUT_PRED}/{len(self._outp_args) + 1},{pred}/{arity})."
+            f":- determination({OUT_PRED}/{len(self._outp_args)},{pred}/{arity})."
         )
 
     def _modes_head(self, sample: dict) -> None:
@@ -122,8 +141,9 @@ class Aleph:
         self._outp_args = self._map_types2args(
             sample, self._outp_attrs, {"int": Directions.IN, "str": Directions.CONST}
         )
+        self._outp_args.append(Argument(type=Types.EID, direction=Directions.IN))
         args = self._map_args(self._outp_args)[0]
-        self.modes.append(make_mode(OUT_PRED, "h", args + [f"+{EXAMPLE_ID_TYPE}"]))
+        self.modes.append(make_mode(OUT_PRED, "h", args))
 
     def _modes_bg(self) -> None:
         for c in self.bg:
@@ -137,17 +157,11 @@ class Aleph:
         self._inp_args = self._map_types2args(
             sample, self._inp_attrs, {"int": Directions.INOUT, "str": Directions.CONST}
         )
+        self._inp_args.append(Argument(type=Types.EID, direction=Directions.OUT))
         args = self._map_args(self._inp_args)
-        if len(args) > 1:
-            for arg_list in args:
-                self.modes.append(
-                    make_mode(INP_PRED, "b", arg_list + [f"-{EXAMPLE_ID_TYPE}"])
-                )
-        else:
-            self.modes.append(
-                make_mode(INP_PRED, "b", arg_list + [f"-{EXAMPLE_ID_TYPE}"])
-            )
-        self._add_deter(INP_PRED, len(self._inp_args) + 1)
+        for arg_list in args:
+            self.modes.append(make_mode(INP_PRED, "b", arg_list))
+        self._add_deter(INP_PRED, len(self._inp_args))
 
     def _map_types2args(
         self, sample: dict, keys: set[str], type2dir: dict
@@ -168,8 +182,8 @@ class Aleph:
         self._modes_head(outputs[0][0])
         self._modes_bg()
         self._modes_inp(inputs[0][0])
-        self.inp_facts = gen_facts(inputs + test, INP_PRED, self._inp_attrs)
-        # self.test_facts = gen_facts(test, INP_PRED, inp_args, len(inputs)+1)
+        self.inp_facts = gen_facts(inputs, INP_PRED, self._inp_attrs)
+        self.test_facts = gen_facts(test, INP_PRED, self._inp_attrs)
         self.pos = gen_facts(outputs, OUT_PRED, self._outp_attrs)
         self.neg = gen_neg_facts(outputs, OUT_PRED, self._outp_attrs)
 
@@ -178,8 +192,8 @@ class Aleph:
         nl = "\n"
         dnl = nl + nl
         self.prolog_prog = f"""{ALEPH_START}
-% input args order:{self._inp_args}
-% oupt args order:{self._outp_args}
+% input args order:{self._inp_attrs}
+% oupt args order:{self._outp_attrs}
 {nl.join(self.modes)}
 {nl.join(self.deters)}{nl}
 :-begin_bg.
@@ -194,15 +208,18 @@ class Aleph:
 :-end_in_neg.
 """
 
-    def run(self, inputs: LLD, outputs: LLD, test: LLD):
+    def run(self, inputs: LLD, outputs: LLD, test: LLD) -> list[list[dict]] | None:
         self.compose_prog(inputs, outputs, test)
         try:
-            dname = "./prolog/aleph/temp/"
-            fname = strftime("%H_%M_%S.pl")
+            dname = f"./prolog/aleph/temp/{strftime('%H_%M_%S')}/"
+            fname = "learn.pl"
+            if not os.path.exists(os.path.dirname(fname)):
+                os.makedirs(dname)
 
             with open(dname + fname, "w", encoding="utf-8") as file:
                 file.write(self.prolog_prog)
 
+            test_file = f"{dname}test.pl"
             with subprocess.Popen(
                 [
                     "swipl",
@@ -210,19 +227,56 @@ class Aleph:
                     "-f",
                     dname + fname,
                     "-g",
-                    f"induce,aleph:write_rules('{dname}rules.pl','aleph'),halt",
+                    f"induce,aleph:write_rules('{test_file}','aleph'),halt",
                 ],
-                stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
             ) as process:
-                stdout, stderr = process.communicate(timeout=20)
+                stdout1, stderr = process.communicate(timeout=20)
 
                 if stderr:
                     print(f"Error: {stderr}")
-                pass
-
+            acc = extract_accuracy(stdout1)
+            max_rule = extract_max_rule(stdout1)
+            if acc == 1 and max_rule <= min(len(self.pos), 4):
+                with open(test_file, "a", encoding="utf-8") as file:
+                    file.write("\n".join(self.bg) + "\n")
+                    file.write("\n".join(self.test_facts) + "\n")
+                    _vars = [
+                        chr(x) for x in range(ord("A"), ord("A") + len(self._outp_args))
+                    ]
+                    _vars = ",".join(_vars)
+                    file.write(f":-setof(({_vars}),outp({_vars}),L1),print(L1).")
+                with subprocess.Popen(
+                    [
+                        "swipl",
+                        "-q",
+                        "-f",
+                        test_file,
+                        "-g",
+                        "halt",
+                    ],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                ) as process:
+                    stdout2, stderr2 = process.communicate(timeout=3)
+                    if stderr2:
+                        print(f"Error: {stderr2}")
+                    else:
+                        test_ans: list[tuple] = literal_eval(stdout2)
+                        res = defaultdict(list)
+                        for t in test_ans:
+                            eid = t[-1]
+                            _d = self._outp_lgg.copy()
+                            for k, v in _d.items():
+                                if v == lgg.VAR:
+                                    i = self._outp_attrs.index(k)
+                                    _d[k] = t[i]
+                            res[eid].append(_d)
+                        self.success = True
+                        return list(res.values())
         except subprocess.TimeoutExpired:
             process.kill()
-            return "Prolog execution timed out."
+        return None
