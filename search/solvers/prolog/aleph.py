@@ -1,16 +1,21 @@
+import logging
 import os
 import re
 import subprocess
 from ast import literal_eval
 from collections import defaultdict
+from collections.abc import Sequence
+from datetime import datetime
 from itertools import product
 from random import randint
-from time import strftime
 
 from search import lgg
-from search.prolog.bg import BASE_BG_ARGS, Argument, Directions, Types
+from search.solvers.base import Solver
+from search.solvers.metafeatures import TaskMetaFeatures
+from search.solvers.prolog.bg import BASE_BG_ARGS, Argument, Directions, Types
 
 LLD = list[list[dict]]
+SSD = Sequence[Sequence[dict]]
 
 ALEPH_START = """:- use_module('../../aleph').
 :- aleph.
@@ -34,10 +39,10 @@ def gen_facts(data: LLD, pred: str, args: list[str], start: int = 1) -> list[str
     res = []
     for i, example in enumerate(data, start):
         for o in example:
-            args_wquotes = iter(
+            args_wquotes = list(
                 f"'{o[a]}'" if isinstance(o[a], str) else str(o[a]) for a in args
-            )
-            res.append(f"{pred}({','.join(args_wquotes)},{i}).")
+            ) + [str(i)]
+            res.append(f"{pred}({','.join(args_wquotes)}).")
     return res
 
 
@@ -48,7 +53,6 @@ def gen_neg_facts(data: LLD, pred: str, args: list[str]) -> list[str]:
         s = {d[a] for e in data for d in e}
         assert len(s) > 1
         pool[a] = s
-
     res = []
     for i, example in enumerate(data, 1):
         for o in example:
@@ -87,8 +91,9 @@ def extract_max_rule(data: str) -> int | None:
     return None
 
 
-class Aleph:
-    def __init__(self, bg: list[str]):
+class Aleph(Solver):
+    def __init__(self, tf: TaskMetaFeatures, bg: list[str]):
+        super().__init__(tf)
         self.bg = bg
         self._outp_args: list[Argument] = []
         self._outp_attrs: list[str] = []
@@ -103,7 +108,8 @@ class Aleph:
         self.pos: list[str] = []
         self.neg: list[str] = []
         self.prolog_prog: str = ""
-        self.success = False
+        self.logger = logging.getLogger("app.aleph")
+        self.test_file = ""
 
     @property
     def outp_consts(self) -> dict:
@@ -177,18 +183,17 @@ class Aleph:
         self._inp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in inputs))
         self._outp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in outputs))
 
-    def _gen_data(self, inputs: LLD, outputs: LLD, test: LLD) -> None:
+    def _gen_data(self, inputs: LLD, outputs: LLD) -> None:
         self._lggs(inputs, outputs)
         self._modes_head(outputs[0][0])
         self._modes_bg()
         self._modes_inp(inputs[0][0])
         self.inp_facts = gen_facts(inputs, INP_PRED, self._inp_attrs)
-        self.test_facts = gen_facts(test, INP_PRED, self._inp_attrs)
         self.pos = gen_facts(outputs, OUT_PRED, self._outp_attrs)
         self.neg = gen_neg_facts(outputs, OUT_PRED, self._outp_attrs)
 
-    def compose_prog(self, inputs: LLD, outputs: LLD, test: LLD) -> None:
-        self._gen_data(inputs, outputs, test)
+    def compose_train(self, inputs: LLD, outputs: LLD) -> None:
+        self._gen_data(inputs, outputs)
         nl = "\n"
         dnl = nl + nl
         self.prolog_prog = f"""{ALEPH_START}
@@ -208,18 +213,19 @@ class Aleph:
 :-end_in_neg.
 """
 
-    def run(self, inputs: LLD, outputs: LLD, test: LLD) -> list[list[dict]] | None:
-        self.compose_prog(inputs, outputs, test)
+    def solve(self, x: SSD, y: SSD) -> bool:
+        self.compose_train(x, y)
         try:
-            dname = f"./prolog/aleph/temp/{strftime('%H_%M_%S')}/"
-            fname = "learn.pl"
+            t = datetime.now().strftime("%H_%M_%S_%f")
+            dname = f"./prolog/aleph/temp/{t}/"
+            fname = "train.pl"
             if not os.path.exists(os.path.dirname(fname)):
                 os.makedirs(dname)
 
             with open(dname + fname, "w", encoding="utf-8") as file:
                 file.write(self.prolog_prog)
 
-            test_file = f"{dname}test.pl"
+            self.test_file = f"{dname}test.pl"
             with subprocess.Popen(
                 [
                     "swipl",
@@ -227,56 +233,78 @@ class Aleph:
                     "-f",
                     dname + fname,
                     "-g",
-                    f"induce,aleph:write_rules('{test_file}','aleph'),halt",
+                    f"induce,aleph:write_rules('{self.test_file}','aleph'),halt",
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
             ) as process:
-                stdout1, stderr = process.communicate(timeout=20)
+                self.logger.info("start induction")
+                stdout1, stderr1 = process.communicate(timeout=4)
+                self.logger.debug(stdout1)
+                self.logger.info("finish induction")
 
-                if stderr:
-                    print(f"Error: {stderr}")
+                if stderr1:
+                    self.logger.error(stderr1)
+                    return False
             acc = extract_accuracy(stdout1)
             max_rule = extract_max_rule(stdout1)
             if acc == 1 and max_rule <= min(len(self.pos), 4):
-                with open(test_file, "a", encoding="utf-8") as file:
-                    file.write("\n".join(self.bg) + "\n")
-                    file.write("\n".join(self.test_facts) + "\n")
-                    _vars = [
-                        chr(x) for x in range(ord("A"), ord("A") + len(self._outp_args))
-                    ]
-                    _vars = ",".join(_vars)
-                    file.write(f":-setof(({_vars}),outp({_vars}),L1),print(L1).")
-                with subprocess.Popen(
-                    [
-                        "swipl",
-                        "-q",
-                        "-f",
-                        test_file,
-                        "-g",
-                        "halt",
-                    ],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                ) as process:
-                    stdout2, stderr2 = process.communicate(timeout=3)
-                    if stderr2:
-                        print(f"Error: {stderr2}")
-                    else:
-                        test_ans: list[tuple] = literal_eval(stdout2)
-                        res = defaultdict(list)
-                        for t in test_ans:
-                            eid = t[-1]
-                            _d = self._outp_lgg.copy()
-                            for k, v in _d.items():
-                                if v == lgg.VAR:
-                                    i = self._outp_attrs.index(k)
-                                    _d[k] = t[i]
-                            res[eid].append(_d)
-                        self.success = True
-                        return list(res.values())
-        except subprocess.TimeoutExpired:
+                self.success = True
+                return True
+        except subprocess.TimeoutExpired as e:
             process.kill()
-        return None
+            self.logger.error(e)
+            return False
+        return False
+
+    def predict(self, x) -> SSD:
+        if not self.success:
+            raise AttributeError("The solver has no solution.")
+
+        self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs)
+
+        with open(self.test_file, "a", encoding="utf-8") as file:
+            file.write("\n".join(self.bg) + "\n")
+            file.write("\n".join(self.test_facts) + "\n")
+            _vars = [chr(x) for x in range(ord("A"), ord("A") + len(self._outp_args))]
+            _vars = ",".join(_vars)
+            file.write(f":-setof(({_vars}),{OUT_PRED}({_vars}),L1),print(L1).")
+        try:
+            with subprocess.Popen(
+                [
+                    "swipl",
+                    "-q",
+                    "-f",
+                    self.test_file,
+                    "-g",
+                    "halt",
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            ) as process:
+                self.logger.info("start test")
+                stdout, stderr = process.communicate(timeout=4)
+                self.logger.debug(stdout)
+                self.logger.info("finish test")
+                if stderr:
+                    self.logger.error(stderr)
+                    raise RuntimeError(stderr)
+                else:
+                    test_ans: list[tuple] = literal_eval(stdout)
+                    res = defaultdict(list)
+                    for t in test_ans:
+                        eid = t[-1]
+                        _d = self._outp_lgg.copy()
+                        for k, v in _d.items():
+                            if v == lgg.VAR:
+                                i = self._outp_attrs.index(k)
+                                _d[k] = t[i]
+                        res[eid].append(_d)
+                    finalres = [res[k] for k in sorted(res.keys())]
+                    self.logger.debug("final res" + str(finalres))
+                    return finalres
+        except subprocess.TimeoutExpired as e:
+            process.kill()
+            self.logger.error(e)

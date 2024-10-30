@@ -5,6 +5,9 @@ from typing import Any, Hashable
 import numpy as np
 import pydantic
 
+NO_BG = -1
+BG = [NO_BG, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
 
 class Region(pydantic.BaseModel, Hashable):
     x: int
@@ -30,16 +33,20 @@ class Region(pydantic.BaseModel, Hashable):
     def mask_hash(self) -> str:
         return str(hash(str(self.mask)))
 
-    @pydantic.computed_field
+    @pydantic.computed_field  # ??
     @cached_property
     def raw_view(self) -> np.ndarray:
-        _r = np.full_like(self.raw, -1)
+        _r = np.full_like(self.raw, NO_BG)
         _r[self.mask] = self.raw[self.mask]
         return _r
 
+    @property
+    def content_dicts(self) -> dict[str, np.ndarray]:
+        return {self.color_hash: self.raw_view, self.mask_hash: self.mask}
+
     @cached_property
     def unq_colors(self) -> list[int]:
-        return sorted(set(np.unique(self.raw_view)) - {-1})
+        return sorted(set(np.unique(self.raw_view)) - {NO_BG})
 
     @property
     def is_one_colored(self) -> bool:
@@ -53,16 +60,26 @@ class Region(pydantic.BaseModel, Hashable):
     def is_primitive(self) -> bool:
         return self.is_one_colored and self.is_rect
 
+    @pydantic.computed_field
+    @property
+    def width(self) -> int:
+        return self.raw_view.shape[1]
+
+    @pydantic.computed_field
+    @property
+    def height(self) -> int:
+        return self.raw_view.shape[0]
+
     @classmethod
     def main_props(cls) -> set[str]:
-        return {"x", "y"} | cls.shortcuts_props()
+        return {"x", "y", "width", "height"} | cls.content_props()
 
     @classmethod
-    def shortcuts_props(cls) -> set[str]:
-        return {"mask_hash", "color_hash"}
+    def content_props(cls) -> set[str]:
+        return {"color_hash"}
 
-    def dump_main_props(self) -> dict:
-        return self.model_dump(include=self.main_props())
+    def dump_main_props(self, exlude: set[str] | None = None) -> dict:
+        return self.model_dump(include=self.main_props(), exclude=exlude)
 
     def __hash__(self) -> int:
         return hash(
@@ -87,8 +104,8 @@ class Region(pydantic.BaseModel, Hashable):
         if isinstance(v, np.ndarray):
             if v.dtype != "int8":
                 raise ValueError(f"Unsupported type {v.dtype}.")
-            if -1 in np.unique(v):
-                raise ValueError("Content cannot have -1.")
+            if NO_BG in np.unique(v):
+                raise ValueError(f"Content cannot have {NO_BG}.")
             return v
         raise ValueError(f"Unsupported type {type(v)}.")
 
@@ -140,8 +157,8 @@ class Bag(pydantic.BaseModel, Hashable):
             regions.extend(b.regions)
         return Bag(regions=tuple(regions))
 
-    def dump_main_props(self) -> tuple[dict]:
-        return tuple(r.dump_main_props() for r in self.regions)
+    def dump_main_props(self, exclude: set[str] | None = None) -> tuple[dict]:
+        return tuple(r.dump_main_props(exclude) for r in self.regions)
 
     def is_empty(self) -> bool:
         return len(self.regions) == 0
@@ -179,40 +196,33 @@ class TaskBags(pydantic.BaseModel, Hashable):
     x_test: Sequence[Bag]
     y_test: Sequence[Bag] | None
 
-    # def __getitem__(self, index: int) -> Sequence[Bag]:
-    #     if index == 0:
-    #         return self.x
-    #     if index == 1:
-    #         return self.y
-    #     if index == 2:
-    #         return self.x_test
-    #     if index == 3 and self.y_test is not None:
-    #         return self.y_test
-    #     raise IndexError()
-
-    # def __len__(self) -> int:
-    #     if self.y_test is None:
-    #         return 3
-    #     return 4
-
-    @property
-    def all_bags(self) -> list[Sequence[Bag]]:
-        if self.y_test is not None:
+    def to_list(self, include_ytest: bool = True) -> list[Sequence[Bag]]:
+        if include_ytest and self.y_test:
             return [self.x, self.y, self.x_test, self.y_test]
         return [self.x, self.y, self.x_test]
 
     @classmethod
-    def from_tuple(
-        cls, x: tuple[Bag], y: tuple[Bag], x_test: tuple[Bag], y_test: tuple[Bag] | None
+    def from_tuples(
+        cls, x: tuple[Bag], x_test: tuple[Bag], y: tuple[Bag], y_test: tuple[Bag] | None
     ) -> "TaskBags":
         return cls(x=x, y=y, x_test=x_test, y_test=y_test)
 
     @classmethod
-    def to_dicts(cls, data: Sequence[Bag]) -> Any:
-        return tuple(b.dump_main_props() for b in data)
+    def to_dicts(
+        cls, data: Sequence[Bag], exclude: set[str] | None = None
+    ) -> tuple[tuple[dict]]:
+        return tuple(b.dump_main_props(exclude) for b in data)
+
+    def collect_hashes(self):
+        res = {}
+        for seq in self.to_list(include_ytest=False):
+            for b in seq:
+                for r in b.regions:
+                    res.update(r.content_dicts)
+        return res
 
     @classmethod
-    def from_dicts(cls, data: list[list[dict]]) -> Sequence[Bag]:
+    def from_dicts(cls, data: list[list[dict]]) -> list[Bag]:
         res = []
         for b in data:
             regs = []

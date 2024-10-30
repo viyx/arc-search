@@ -28,7 +28,7 @@ def task1_bags(raw: RawTaskData, init_action: Action) -> TaskBags:
     ys = tuple(init_action(x) for x in raw.train_y)
     xtests = tuple(init_action(x) for x in raw.test_x)
     ytests = tuple(init_action(x) for x in raw.test_y)
-    taskbags = TaskBags.from_tuple(xs, ys, xtests, ytests)
+    taskbags = TaskBags.from_tuples(xs, xtests, ys, ytests)
     return taskbags
 
 
@@ -71,7 +71,7 @@ def test_extract(raw: RawTaskData):
 
 
 def test_actions_redundancy(task: TaskBags, all_actions: set[Action]):
-    for bags in task.all_bags:
+    for bags in task.to_list():
         s = set()
         for a in all_actions:
             s.add(ef(a, bags))
@@ -86,14 +86,14 @@ def test_disconnected(task: TaskBags):
     a3 = Action(name=Extractors.ER, bg=fake_bg, c=-1)
     a4 = Action(name=Extractors.EP, bg=fake_bg, c=-1)
 
-    for bags in task.all_bags:
+    for bags in task.to_list():
         s = set()
         for a in [a1, a2, a3, a4]:
-            tbags_nobg = ef(a, bags, False)
-            for b in tbags_nobg:
-                for r in b.regions:
+            for b in bags:
+                new_bag = ef(a, b)
+                for r in new_bag.regions:
                     assert r.mask.shape == (1, 1)
-            s.add(tbags_nobg)
+            s.add(new_bag)
             # check identical hashes
         assert len(s) == 1
 
@@ -110,19 +110,15 @@ def test_bg(task: TaskBags):
     r02 = Action(name=Extractors.ER, bg=bg2, c=2)
 
     # pixel regions equals primitives
-    assert ef(p01, wo_c2, False) == ef(r01, wo_c2, False)
-    assert ef(p01, wo_c2, False) == ef(p02, wo_c2, False)
-    assert ef(p02, wo_c2, False) == ef(r02, wo_c2, False)
-    assert ef(r01, wo_c2, False) == ef(r02, wo_c2, False)
+    assert ef(p01, wo_c2) == ef(r01, wo_c2)
+    assert ef(p01, wo_c2) == ef(p02, wo_c2)
+    assert ef(p02, wo_c2) == ef(r02, wo_c2)
+    assert ef(r01, wo_c2) == ef(r02, wo_c2)
 
     # change coords
-    assert ef(p01, wo_c2, False) != ef(p01, ef(p01, wo_c2, False), False)
-    assert ef(r01, wo_c2, False) != ef(r01, ef(r01, wo_c2, False), False)
+    assert ef(p01, wo_c2) != ef(p01, ef(p01, wo_c2))
+    assert ef(r01, wo_c2) != ef(r01, ef(r01, wo_c2))
 
     # no change coords
-    assert ef(p01, ef(p01, wo_c2, False), False) == ef(
-        p01, ef(p01, ef(p01, wo_c2, False), False), False
-    )
-    assert ef(r01, ef(r01, wo_c2, False), False) == ef(
-        r01, ef(r01, ef(r01, wo_c2, False), False), False
-    )
+    assert ef(p01, ef(p01, wo_c2)) == ef(p01, ef(p01, ef(p01, wo_c2)))
+    assert ef(r01, ef(r01, wo_c2)) == ef(r01, ef(r01, ef(r01, wo_c2)))

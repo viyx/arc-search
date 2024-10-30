@@ -23,7 +23,7 @@ def dict_keys_dist(a: dict, b: dict, exclude: list[str] | None = None):
     n = 0
     m = 0
     for k in a:
-        if exclude is not None and k in exclude:
+        if exclude and k in exclude:
             continue
         n += 1
         if k not in b:

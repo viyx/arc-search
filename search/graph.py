@@ -1,10 +1,15 @@
 import logging
-from typing import Any
+from typing import Any, Generator
 
+import networkx as nx
 from networkx import DiGraph
 
 from reprs.primitives import Bag
 from search.actions import Action
+
+# TODO
+# Add constants
+# Add datatype for solutions
 
 
 class DAG:
@@ -12,28 +17,60 @@ class DAG:
         self.g = DiGraph()
         self.logger = logging.getLogger("app.graph")
 
-    def filter_by(self, attr: str, value: Any) -> list[str]:
-        nodes = self.g.nodes.data(attr)
-        return [k for k, v in nodes if v == value]
+    def _filter_nodes_by(self, attr: str, value: Any) -> set[str]:
+        attrs = self.g.nodes.data(attr)
+        return {k for k, v in attrs if v == value}
 
     def _get_values_upstream(self, node: str, attr: str) -> list[Any]:
-        # assumed tree-like dag
         def _r(node: str, attr: str, res: list):
-            res.append(self.get_data_by_attr(node, attr))
+            res.append(self._get_data_by_attr(node, attr))
             preds = list(self.g.predecessors(node))
             if preds:
                 if len(preds) > 1:
-                    raise NotImplementedError()
+                    raise NotImplementedError("Found multiple parents for a node.")
                 return _r(preds[0], attr, res)
             return res
 
         return _r(node, attr, [])
 
+    def get_solved_down(self, node: str) -> Generator[str, None, None]:
+        solved_nodes = set(self.g.nodes) - self._filter_nodes_by("sol", None)
+        current_node = node
+
+        while current_node:
+            solved_children = solved_nodes & set(self.g.successors(current_node))
+            if len(solved_children) > 1:
+                raise NotImplementedError("Multiple parents found for a node.")
+            current_node = solved_children.pop() if solved_children else None
+            if current_node:
+                yield current_node
+
+    @property
+    def init_node(self) -> str | None:
+        return next(nx.topological_sort(self.g))
+
     def get_actions_upstream(self, node: str) -> list[Action]:
         return self._get_values_upstream(node, "action")
 
+    def get_parent(self, node: str) -> str | None:
+        preds = list(self.g.predecessors(node))
+        if len(preds) > 1:
+            raise NotImplementedError("Found multiple parents for a node.")
+        if len(preds) == 0:
+            return None
+        return preds[0]
+
+    def get_children(self, node: str) -> list[str]:
+        return list(self.g.successors(node))
+
+    def get_action(self, node: str) -> Action:
+        return self._get_data_by_attr(node, "action")
+
+    def get_solution(self, node: str) -> Any:
+        return self._get_data_by_attr(node, "sol")
+
     def can_add_node(self, content_hash: str) -> bool:
-        same_hash = self.filter_by("content_hash", content_hash)
+        same_hash = self._filter_nodes_by("content_hash", content_hash)
         if len(same_hash) > 0:
             self.logger.debug("find duplicate hash %s", content_hash)
             if len(same_hash) > 1:
@@ -41,13 +78,19 @@ class DAG:
             return False
         return True
 
+    def set_solution(self, node: str, sol: Any, hashes: dict) -> None:
+        prev_sol = self._get_data_by_attr(node, "sol")
+        if prev_sol is not None:
+            raise NotImplementedError("Unable to add solution to existing one.")
+        self.g.nodes[node]["sol"] = (sol, hashes)
+
     def try_add_node(
         self,
         action: Action,
-        parent: str,
+        parent: str | None,
         bags: tuple[Bag],
         test_bags: tuple[Bag] | None,
-        **kwargs,
+        sol: Any | None = None,
     ) -> str | None:
         if any(b.is_empty() for b in bags) or (
             test_bags and any(b.is_empty() for b in test_bags)
@@ -56,49 +99,31 @@ class DAG:
         if self.can_add_node(
             content_hash := hash(str(hash(bags)) + str(hash(test_bags)))
         ):
-            new_name = f"{parent} --> {action}" if parent else str(action)
+            new_node = f"{parent} --> {action}" if parent else str(action)
             self.g.add_node(
-                new_name,
+                new_node,
                 data=bags,
                 test_data=test_bags,
                 content_hash=content_hash,
                 action=action,
-                **kwargs,
+                sol=sol,
             )
-            self.logger.debug("add node %s", new_name)
+            self.logger.debug("add node %s", new_node)
             if parent:
-                self.g.add_edge(parent, new_name)
-            return new_name
+                self.g.add_edge(parent, new_node)
+            return new_node
         return None
 
-    def get_data_by_attr(self, node: str, attr: str) -> Any:
+    def _get_data_by_attr(self, node: str, attr: str) -> Any:
         return self.g.nodes[node][attr]
 
-    # def add_solved_yet(self, node: str, refnode: str, to_add: dict) -> None:
-    #     "Make `left join` for two dicts with possible nested dicts."
-    #     solved_yet = self.get_data_by_attr(node, "solved_yet")
-    #     for k, v in to_add.items():
-    #         if k not in solved_yet:
-    #             solved_yet[k] = {"op": v, "ref": refnode}
-    #         elif isinstance(v, dict):
-    #             for k2, v2 in v:
-    #                 if k2 not in solved_yet[k]:
-    #                     solved_yet[k][k2] = {"op": v2, "ref": refnode}
-    #     solved = np.isclose(dict_keys_dist(Region.blank(), solved_yet, ["raw"]), 0)
-    #     self.g.nodes[node]["solved"] = solved
-    #     self.g.nodes[node]["solved_yet"] = solved_yet
+    def get_actions(self, nodes: list[str]) -> list[Action]:
+        return [self._get_data_by_attr(n, "action") for n in nodes]
 
+    def get_solutions(self, nodes: list[str]) -> list[Any]:
+        return [self._get_data_by_attr(n, "sol") for n in nodes]
 
-class BiDag:
-    def __init__(self) -> None:
-        self.xdag = DAG()
-        self.ydag = DAG()
-
-    def get_bags(
-        self, xnode: str, ynode: str
-    ) -> tuple[tuple[Bag], tuple[Bag], tuple[Bag], tuple[Bag] | None]:
-        xbags = self.xdag.get_data_by_attr(xnode, "data")
-        xtest_bags = self.xdag.get_data_by_attr(xnode, "test_data")
-        ybags = self.ydag.get_data_by_attr(ynode, "data")
-        ytest_bags = self.ydag.get_data_by_attr(ynode, "test_data")
-        return xbags, ybags, xtest_bags, ytest_bags
+    def get_data(self, node: str) -> tuple[tuple[Bag], tuple[Bag] | None]:
+        bags = self._get_data_by_attr(node, "data")
+        test_bags = self._get_data_by_attr(node, "test_data")
+        return bags, test_bags

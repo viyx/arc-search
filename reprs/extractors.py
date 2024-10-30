@@ -1,26 +1,32 @@
 import numpy as np
 from skimage.measure import label
 
-from reprs.primitives import Bag, Region
+from reprs.primitives import NO_BG, Bag, Region
+
+NO_CONN = -1
+FOUR_CONN = 1
+EIGHT_CONN = 2
+CONNECTIVITY = [NO_CONN, FOUR_CONN, EIGHT_CONN]
 
 
 def _label(data: np.ndarray, c: int, bg: int) -> tuple[np.ndarray, int]:
-    if c == -1:  # no connectivity, return 1-pixel components
+    if c == NO_CONN:  # no connectivity, return 1-pixel components
         if data.dtype != bool:
             mask = data != bg
         else:
             mask = data
         ncomps = mask.sum()
-        comps = np.full_like(data, -1, dtype=int)
+        comps = np.full_like(data, NO_BG, dtype=int)
         comps[mask] = np.arange(1, ncomps + 1)
         return comps, ncomps
     if c in [1, 2]:
         return label(data, return_num=True, background=bg, connectivity=c)
+    raise ValueError("Not supported connectivity.")
 
 
 def extract_regions(data: np.ndarray, bg: int, c: int) -> Bag:
-    mask = (data != bg) & (data != -1)
-    comps, ncomps = _label(mask, c, -1)
+    mask = (data != bg) & (data != NO_BG)
+    comps, ncomps = _label(mask, c, NO_BG)
     regions = []
     for i in range(1, ncomps + 1):
         _mask = comps == i

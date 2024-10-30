@@ -16,7 +16,7 @@ def _init_logging(level: str) -> None:
     _logger = logging.getLogger(APP_LOGGER)
     _logger.setLevel(level.upper())
     console_handler = logging.StreamHandler()
-    console_handler.setLevel("ERROR")
+    console_handler.setLevel("DEBUG")
     fname = strftime("./logs/%m_%d_%Y/app_%H_%M_%S.log")
     if not os.path.exists(os.path.dirname(fname)):
         os.makedirs(os.path.dirname(fname))
@@ -47,22 +47,6 @@ if __name__ == "__main__":
         logger.info("start task %s", name)
         ts = TaskSearch(ds[i])
         ts.search_topdown()
-        results = ts.test()
-        for y, pred in zip(ds[i].test_y, results):
-            s = np.all(y == pred)
-            # succ += s
+        res = ts.test()
+        for y, pred in zip(ds[i].test_y, res):
             print("result", np.all(y == pred))
-    #     try:
-    #         ts = TaskSearch(ds[i])
-    #         ts.search_topdown()
-    #         results = ts.test()
-    #         for y, pred in zip(ds[i].test_y, results):
-    #             s = np.all(y == pred)
-    #             succ += s
-    #             print("result", np.all(y == pred))
-    #     except NotImplementedError as e:
-    #         print(e)
-    #         fails += 1
-    #     except BaseException:
-    #         fails += 1
-    # print(succ, fails)
