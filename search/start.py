@@ -11,7 +11,7 @@ from datasets.arc import RawTaskData
 from reprs.primitives import Bag, Region, TaskBags
 from search.distances import dl
 from search.graph import DAG
-from search.solvers.pipeline import solve_pipe
+from search.solvers.pipeline import main_pipe
 
 INIT_ACTION = A.INIT_ACTIONS[0]
 
@@ -46,11 +46,13 @@ class TaskSearch:
             new_pairs = set(product(xnodes, ynodes, [exclude]))
             new_pairs.discard(self.closed)
             for xnode, ynode, _ in new_pairs:
-                # if xnode == "R(-1, 1) --> P( 0,-1)"
-                # and ynode == "R(-1, 1) --> P( 0,-1)":
-                #     hard_dist = -1
                 xbags, ybags, *_ = self._get_bags(xnode, ynode)
                 d = hard_dist or dl(xbags, ybags)
+                if (
+                    xnode == "R(-1, 1) --> P( 0,-1)"
+                    and ynode == "R(-1, 1) --> P( 0,-1)"
+                ):
+                    d = -1
                 self.q.put((d, xnode, ynode, exclude))
                 self.logger.debug("put node %s", (d, xnode, ynode, exclude))
 
@@ -78,7 +80,7 @@ class TaskSearch:
         while self.q.qsize() != 0 and not self.success and i < 1000:
             i += 1
             self.logger.debug(
-                "%s: size(q, x, y) = (%s, %s, %s)",
+                "step %s: size(q, x, y) = (%s, %s, %s)",
                 i,
                 self.q.qsize(),
                 self.xdag.g.number_of_nodes(),
@@ -88,7 +90,7 @@ class TaskSearch:
             tbag = TaskBags.from_tuples(
                 *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
             )
-            ans = solve_pipe(tbag, exclude=exclude)
+            ans = main_pipe(tbag, exclude=exclude)
             self.closed.add((xnode, ynode, exclude))
             if not ans:
                 self._expand(tbag, xnode, ynode)

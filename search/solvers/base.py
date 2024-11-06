@@ -43,10 +43,6 @@ class Solver:
         self.success = False
         self._tf = tf
 
-    # @property
-    # def success(self) -> bool:
-    # return self._success
-
     @abstractmethod
     def solve(self, x: SSD, y: SSD) -> bool:
         pass
@@ -123,6 +119,7 @@ class ConstantsRemover(Transformer):
         return xcopy
 
 
+#   TODO split into 3 separate solvers
 class PrimitiveSolver(Solver):
     def __init__(self, tf: TaskMetaFeatures):
         self.y_count: int | None = None
@@ -164,9 +161,7 @@ class PrimitiveSolver(Solver):
         if self.case1:
             res = []
             for xi in x:
-                res_i = []
-                res_i.append([copy(self._tf.ylgg) for _ in range(len(xi))])
-                res.append(res_i)
+                res.append([copy(self._tf.ylgg) for _ in range(len(xi))])
             return res
         if self.case2:
             res = []

@@ -50,8 +50,8 @@ MORE = """more(A,B):-
     integer(B),
     A > B."""
 
-# BASE_BG = [PLUS1FUNC, MINUS1FUNC, LESS, MORE]
-BASE_BG = [LESS]
+BASE_BG = [PLUS1FUNC, MINUS1FUNC, LESS]
+# BASE_BG = [LESS]
 
 BASE_BG_ARGS: dict[str, Predicate] = {
     PLUS1FUNC: Predicate(

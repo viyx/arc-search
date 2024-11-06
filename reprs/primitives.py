@@ -78,6 +78,10 @@ class Region(pydantic.BaseModel, Hashable):
     def content_props(cls) -> set[str]:
         return {"color_hash"}
 
+    @classmethod
+    def position_props(cls) -> set[str]:
+        return {"x", "y"}
+
     def dump_main_props(self, exlude: set[str] | None = None) -> dict:
         return self.model_dump(include=self.main_props(), exclude=exlude)
 

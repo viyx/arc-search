@@ -26,16 +26,14 @@ prune((Head :- Body)) :-
     check_any_cond(check_io, Head, Atoms),
     !.
 
+% prune((Head :- Body)) :-
+%     term_singletons((Head :- Body),S),
+%     S\=[].
 
-% prune((_Head :- Body)) :-
-%     flatten_body(Body, Atoms),
-%     include(is_inp, Atoms, L),
-%     length(L,Le),
-%     Le =\= 2,
-%     !.
+% :-
+%     hypothesis(Head,Body,_),
+%     prune1((Head:-Body)).
 
-% is_inp(Term) :-
-%     Term =.. [inp|_].
 
 check_inp(_Head, BodyElement):-
     \+ functor(BodyElement,inp,_).
@@ -51,8 +49,8 @@ check_io(Head, BodyElement):-
     true
     ).
 
-assert_facts([]).
-assert_facts([Fact | Rest]) :-
-    assertz(Fact),
-    print(Fact),
-    assert_facts(Rest).
+% assert_facts([]).
+% assert_facts([Fact | Rest]) :-
+%     assertz(Fact),
+%     print(Fact),
+%     assert_facts(Rest).
