@@ -50,3 +50,4 @@ if __name__ == "__main__":
         res = ts.test()
         for y, pred in zip(ds[i].test_y, res):
             print("result", np.all(y == pred))
+    pass

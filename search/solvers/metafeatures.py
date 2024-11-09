@@ -5,13 +5,22 @@ from search import lgg
 
 
 class TaskMetaFeatures:
-    def __init__(self, task: TaskBags, *, exclude: set[str] | None = None) -> None:
-        self.exclude = exclude
+    def __init__(
+        self,
+        task: TaskBags,
+        *,
+        exclude: set[str] | None = None,
+        include: set[str] | None = None
+    ) -> None:
+        # self.exclude = exclude
         self.str_fields = Region.content_props()
         # self.all_fields = Region.main_props()
         self._task = task
         # self.x_lggs = [lgg.lgg_ext(b.dump_main_props()) for b in task.x]
-        self.ylggs = [lgg.lgg_ext(b.dump_main_props(exclude=exclude)) for b in task.y]
+        self.ylggs = [
+            lgg.lgg_ext(b.dump_main_props(exclude=exclude, include=include))
+            for b in task.y
+        ]
         self.ylgg = lgg.lgg_dict(self.ylggs)
         # self.test_lggs = [lgg.lgg_ext(b.dump_main_props()) for b in task.x_test]
 
@@ -78,3 +87,6 @@ class TaskMetaFeatures:
             if xs_test.isdisjoint(xs) or xs_test > xs:
                 return False
         return True
+
+    def len_x(self) -> int:
+        return len(self._task.x)

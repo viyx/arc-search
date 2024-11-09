@@ -39,7 +39,7 @@ TSSD = tuple[SSD, SSD]
 
 
 class Solver:
-    def __init__(self, tf: TaskMetaFeatures):
+    def __init__(self, tf: TaskMetaFeatures):  # remove at all??
         self.success = False
         self._tf = tf
 
@@ -67,16 +67,17 @@ class Transformer(ABC):
 
 
 class Dictionarizer(Transformer):
-    def __init__(self, exclude: set[str] | None):
+    def __init__(self, *, exclude: set[str] | None, include: set[str] | None):
         self.exclude = exclude
+        self.include = include
 
     def fit_transform(self, x: SSA[Bag], y: SSA[Bag]) -> TSSD:
-        x_ = TaskBags.to_dicts(x, self.exclude)
-        y_ = TaskBags.to_dicts(y, self.exclude)
+        x_ = TaskBags.to_dicts(x, exclude=self.exclude, include=self.include)
+        y_ = TaskBags.to_dicts(y, exclude=self.exclude, include=self.include)
         return x_, y_
 
     def transform_xtest(self, xtest: SSA[Bag]) -> SSD:
-        x_ = TaskBags.to_dicts(xtest, self.exclude)
+        x_ = TaskBags.to_dicts(xtest, exclude=self.exclude, include=self.include)
         return x_
 
     def inverse_transform_xtest(self, xtest: SSD) -> SSD:

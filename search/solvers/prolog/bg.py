@@ -2,10 +2,6 @@ from enum import Enum
 
 from pydantic import BaseModel
 
-# NAT_TYPE = "nat"
-# STR_TYPE = "str"
-# EXAMPLE_ID_TYPE = "ei"
-
 
 class Types(str, Enum):
     INT = "int"
@@ -37,11 +33,28 @@ PLUS1FUNC = """plus1func(A,B):-
     integer(A),
     B is A + 1."""
 
+PLUS2FUNC = """plus2func(A,B):-
+    integer(A),
+    B is A + 2."""
+
+PLUS3FUNC = """plus3func(A,B):-
+    integer(A),
+    B is A + 3."""
+
+
 MINUS1FUNC = """minus1func(A,B):-
     integer(A),
     B is A - 1."""
 
-LESS = """less(A,B):-
+MINUS2FUNC = """minus2func(A,B):-
+    integer(A),
+    B is A - 2."""
+
+MINUS3FUNC = """minus3func(A,B):-
+    integer(A),
+    B is A - 3."""
+
+LESSFUNC = """less(A,B):-
     (integer(A), integer(B)) -> A < B;
     (integer(A) -> (A1 is A+1, between(A1,29,B));false)."""
 
@@ -50,12 +63,33 @@ MORE = """more(A,B):-
     integer(B),
     A > B."""
 
-BASE_BG = [PLUS1FUNC, MINUS1FUNC, LESS]
-# BASE_BG = [LESS]
+BASE_BG = [
+    PLUS1FUNC,
+    PLUS2FUNC,
+    PLUS3FUNC,
+    MINUS1FUNC,
+    MINUS2FUNC,
+    MINUS3FUNC,
+    LESSFUNC,
+]
 
 BASE_BG_ARGS: dict[str, Predicate] = {
     PLUS1FUNC: Predicate(
         name="plus1func",
+        args=[
+            Argument(type=Types.INT, direction=Directions.IN),
+            Argument(type=Types.INT, direction=Directions.OUT),
+        ],
+    ),
+    PLUS2FUNC: Predicate(
+        name="plus2func",
+        args=[
+            Argument(type=Types.INT, direction=Directions.IN),
+            Argument(type=Types.INT, direction=Directions.OUT),
+        ],
+    ),
+    PLUS3FUNC: Predicate(
+        name="plus3func",
         args=[
             Argument(type=Types.INT, direction=Directions.IN),
             Argument(type=Types.INT, direction=Directions.OUT),
@@ -68,7 +102,21 @@ BASE_BG_ARGS: dict[str, Predicate] = {
             Argument(type=Types.INT, direction=Directions.OUT),
         ],
     ),
-    LESS: Predicate(
+    MINUS2FUNC: Predicate(
+        name="minus2func",
+        args=[
+            Argument(type=Types.INT, direction=Directions.IN),
+            Argument(type=Types.INT, direction=Directions.OUT),
+        ],
+    ),
+    MINUS3FUNC: Predicate(
+        name="minus3func",
+        args=[
+            Argument(type=Types.INT, direction=Directions.IN),
+            Argument(type=Types.INT, direction=Directions.OUT),
+        ],
+    ),
+    LESSFUNC: Predicate(
         name="less",
         args=[
             Argument(type=Types.INT, direction=Directions.IN),

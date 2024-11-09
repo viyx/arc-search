@@ -3,13 +3,7 @@ from collections.abc import Sequence
 from copy import copy
 
 from reprs.primitives import Region, TaskBags
-from search.solvers.base import (
-    ConstantsRemover,
-    Dictionarizer,
-    PrimitiveSolver,
-    Solver,
-    Transformer,
-)
+from search.solvers.base import Dictionarizer, PrimitiveSolver, Solver, Transformer
 from search.solvers.metafeatures import TaskMetaFeatures
 from search.solvers.prolog.aleph import AlephSwipl
 from search.solvers.prolog.bg import BASE_BG
@@ -58,12 +52,14 @@ class Pipeline(Solver):
                             self.success = True
                             self.success_step = i
                             return True
+                        raise RuntimeError("Validation failed.")
                 except RuntimeError as e:
                     self.logger.error("Error on step %s in solver %s: %s", i, s, e)
                     continue
                 except AttributeError as e:
                     self.logger.error("Error on step %s in solver %s: %s", i, s, e)
                     continue
+
         return False
 
     def predict(self, x):
@@ -84,13 +80,15 @@ class Pipeline(Solver):
         return p
 
 
-def main_pipe(task: TaskBags, *, exclude: set[str] | None = None) -> SSD | None:
-    tf = TaskMetaFeatures(task, exclude=exclude)
+def main_pipe(
+    task: TaskBags, *, exclude: set[str] | None = None, include: set[str] | None = None
+) -> SSD | None:
+    tf = TaskMetaFeatures(task, exclude=exclude, include=include)
     if exclude or (tf.all_y_pixels and tf.all_x_pixels):
         pipe_prim = Pipeline(
             tf,
             steps=[
-                Dictionarizer(exclude=exclude),
+                Dictionarizer(exclude=exclude, include=include),
                 PrimitiveSolver(tf),
             ],
         )
@@ -100,12 +98,12 @@ def main_pipe(task: TaskBags, *, exclude: set[str] | None = None) -> SSD | None:
         pipe_prolog = Pipeline(
             tf,
             steps=[
-                Dictionarizer(exclude=exclude),
-                ConstantsRemover(),
+                Dictionarizer(exclude=exclude, include=include),
+                # ConstantsRemover(),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=0, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=100, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=1000, timeout=60),
-                AlephSwipl(tf, bg=BASE_BG, opt_neg_n=5000, timeout=60),
+                AlephSwipl(tf, bg=BASE_BG, opt_neg_n=5000, timeout=200),
             ],
         )
         if pipe_prolog.solve_validate(task.x, task.y, task.x_test):

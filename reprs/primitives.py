@@ -72,7 +72,7 @@ class Region(pydantic.BaseModel, Hashable):
 
     @classmethod
     def main_props(cls) -> set[str]:
-        return {"x", "y", "width", "height"} | cls.content_props()
+        return {"x", "y"} | cls.content_props()
 
     @classmethod
     def content_props(cls) -> set[str]:
@@ -82,8 +82,15 @@ class Region(pydantic.BaseModel, Hashable):
     def position_props(cls) -> set[str]:
         return {"x", "y"}
 
-    def dump_main_props(self, exlude: set[str] | None = None) -> dict:
-        return self.model_dump(include=self.main_props(), exclude=exlude)
+    @classmethod
+    def size_props(cls) -> set[str]:
+        return {"width", "height"}
+
+    def dump_main_props(
+        self, *, exclude: set[str] | None = None, include: set[str] | None = None
+    ) -> dict:
+        incl = self.main_props() | include if include else self.main_props()
+        return self.model_dump(include=incl, exclude=exclude)
 
     def __hash__(self) -> int:
         return hash(
@@ -161,8 +168,12 @@ class Bag(pydantic.BaseModel, Hashable):
             regions.extend(b.regions)
         return Bag(regions=tuple(regions))
 
-    def dump_main_props(self, exclude: set[str] | None = None) -> tuple[dict]:
-        return tuple(r.dump_main_props(exclude) for r in self.regions)
+    def dump_main_props(
+        self, *, exclude: set[str] | None = None, include: set[str] | None = None
+    ) -> tuple[dict]:
+        return tuple(
+            r.dump_main_props(exclude=exclude, include=include) for r in self.regions
+        )
 
     def is_empty(self) -> bool:
         return len(self.regions) == 0
@@ -213,9 +224,13 @@ class TaskBags(pydantic.BaseModel, Hashable):
 
     @classmethod
     def to_dicts(
-        cls, data: Sequence[Bag], exclude: set[str] | None = None
+        cls,
+        data: Sequence[Bag],
+        *,
+        exclude: set[str] | None = None,
+        include: set[str] | None = None,
     ) -> tuple[tuple[dict]]:
-        return tuple(b.dump_main_props(exclude) for b in data)
+        return tuple(b.dump_main_props(exclude=exclude, include=include) for b in data)
 
     def collect_hashes(self):
         res = {}

@@ -26,13 +26,24 @@ prune((Head :- Body)) :-
     check_any_cond(check_io, Head, Atoms),
     !.
 
-% prune((Head :- Body)) :-
-%     term_singletons((Head :- Body),S),
-%     S\=[].
+has_singletons((Head :- Body)) :-
+    term_singletons((Head :- Body),S),
+    S\=[].
 
-% :-
-%     hypothesis(Head,Body,_),
-%     prune1((Head:-Body)).
+aleph_false:-
+    hypothesis(Head,Body,_,'aleph'),
+    has_singletons((Head:-Body)).
+
+
+% doesn't work, just debug
+% aleph_false:-
+%     hypothesis(Head,_,_,'aleph'),
+%     functor(Head,_,A),
+%     arg(A,Head,Id),
+%     var(Id).
+    % print(Id),
+    % !.
+
 
 
 check_inp(_Head, BodyElement):-
@@ -48,9 +59,3 @@ check_io(Head, BodyElement):-
     ;
     true
     ).
-
-% assert_facts([]).
-% assert_facts([Fact | Rest]) :-
-%     assertz(Fact),
-%     print(Fact),
-%     assert_facts(Rest).

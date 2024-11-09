@@ -30,9 +30,9 @@ class TaskSearch:
         self.y_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
 
     def _get(self) -> tuple[float, str, str, frozenset]:
-        dist, x, y, exclude = self.q.get()
-        self.logger.debug("get node %s", (dist, x, y, exclude))
-        return dist, x, y, exclude
+        dist, x, y, exclude, include = self.q.get()
+        self.logger.debug("get node %s", (dist, x, y, exclude, include))
+        return dist, x, y, exclude, include
 
     def _put(
         self,
@@ -40,12 +40,13 @@ class TaskSearch:
         ynodes: set[str],
         *,
         exclude: frozenset[str],
+        include: frozenset[str],
         hard_dist: float | None = None
     ) -> None:
         if len(xnodes) > 0 and len(ynodes) > 0:
-            new_pairs = set(product(xnodes, ynodes, [exclude]))
+            new_pairs = set(product(xnodes, ynodes, [exclude], [include]))
             new_pairs.discard(self.closed)
-            for xnode, ynode, _ in new_pairs:
+            for xnode, ynode, *_ in new_pairs:
                 xbags, ybags, *_ = self._get_bags(xnode, ynode)
                 d = hard_dist or dl(xbags, ybags)
                 if (
@@ -53,8 +54,8 @@ class TaskSearch:
                     and ynode == "R(-1, 1) --> P( 0,-1)"
                 ):
                     d = -1
-                self.q.put((d, xnode, ynode, exclude))
-                self.logger.debug("put node %s", (d, xnode, ynode, exclude))
+                self.q.put((d, xnode, ynode, exclude, include))
+                self.logger.debug("put node %s", (d, xnode, ynode, exclude, include))
 
     def _init_search(self) -> None:
         make_dump_regions = INIT_ACTION
@@ -72,7 +73,7 @@ class TaskSearch:
             if self.load_testy
             else None,
         )
-        self._put({xnode}, {ynode}, exclude=frozenset())
+        self._put({xnode}, {ynode}, exclude=frozenset(), include=frozenset())
 
     def search_topdown(self) -> None:
         self._init_search()
@@ -86,11 +87,11 @@ class TaskSearch:
                 self.xdag.g.number_of_nodes(),
                 self.ydag.g.number_of_nodes(),
             )
-            _, xnode, ynode, exclude = self._get()
+            _, xnode, ynode, exclude, include = self._get()
             tbag = TaskBags.from_tuples(
                 *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
             )
-            ans = main_pipe(tbag, exclude=exclude)
+            ans = main_pipe(tbag, exclude=exclude, include=include)
             self.closed.add((xnode, ynode, exclude))
             if not ans:
                 self._expand(tbag, xnode, ynode)
@@ -104,12 +105,18 @@ class TaskSearch:
             xparent = self.xdag.get_parent(xnode)
             yparent = self.ydag.get_parent(ynode)
             new_exclude = frozenset(Region.content_props())
+            new_include = frozenset(Region.size_props())
             # if A.is_nobg_action(curr_act_y):
             # new_exclude.update({"width", "height"})
             # we can get width and height from successors
             # self._put({xparent}, {yparent}, , hard_dist=-1)
-            self._put({xparent}, {yparent}, exclude=new_exclude, hard_dist=-1)
-            # self.closed.add((xnode, ynode, exclude))
+            self._put(
+                {xparent},
+                {yparent},
+                exclude=new_exclude,
+                include=new_include,
+                hard_dist=-1,
+            )
 
     def _add_nodes(
         self,
@@ -145,7 +152,7 @@ class TaskSearch:
         if len(new_xnodes | new_ynodes) > 0:
             xs_expand = new_xnodes or set(self.xdag.g.nodes)
             ys_expand = new_ynodes or set(self.ydag.g.nodes)
-            self._put(xs_expand, ys_expand, exclude=frozenset())
+            self._put(xs_expand, ys_expand, exclude=frozenset(), include=frozenset())
 
     def _get_bags(
         self, xnode: str, ynode: str
@@ -165,13 +172,13 @@ class TaskSearch:
         skeletons = [np.full(shape=(30, 30), fill_value=-2) for _ in range(n)]
         for a, (s, hashes) in zip(actions, solutions):
             for i, si in enumerate(s):
-                prop = Region.content_props().pop()
+                cont_prop = Region.content_props().pop()
                 sample = si[0]
                 for reg in si:
                     xs, ys = np.where(skeletons[i] == -1)
                     skeletons[i][xs, ys] = a.bg
-                    if prop in sample:
-                        cont: np.ndarray = hashes[reg[prop]]
+                    if cont_prop in sample:
+                        cont: np.ndarray = hashes[reg[cont_prop]]
                         x = reg["x"]
                         height = cont.shape[0]
                         y = reg["y"]

@@ -9,7 +9,6 @@ from collections.abc import Sequence
 from datetime import datetime
 from itertools import product
 
-from search import lgg
 from search.solvers.base import Solver
 from search.solvers.metafeatures import TaskMetaFeatures
 from search.solvers.prolog.bg import BASE_BG_ARGS, Argument, Directions, Types
@@ -23,14 +22,13 @@ ALEPH_START = """:- use_module('../../aleph').
 :- ['../../aleph_prune'].
 :- style_check(-discontiguous).
 :- aleph_set(check_redundant,true).
-:- aleph_set(clauselength,6).
+:- aleph_set(clauselength,5).
 """
 
-#   TODO Remove logic with constants in Aleph.
 #   TODO Create specific Transformer for Aleph input. Add #eid to the end of regions
 
 
-# Change these consts carefully, used in aleph_prune.pl
+# Change these consts carefully, they are used in aleph_prune.pl
 INP_PRED = "inp"
 OUT_PRED = "outp"
 
@@ -40,7 +38,7 @@ def make_mode(pred: str, h_or_b: str, args: list[str], n: int | None = None) -> 
     return f":- mode{h_or_b}({_n},{pred}({','.join(args)}))."
 
 
-def gen_facts(data: LLD, pred: str, args: list[str], start: int = 1) -> list[str]:
+def gen_facts(data: LLD, pred: str, args: list[str], *, start: int = 1) -> list[str]:
     res = []
     for i, example in enumerate(data, start):
         for reg in example:
@@ -75,8 +73,6 @@ class AlephSwipl(Solver):
         self._outp_attrs: list[str] = []
         self._inp_args: list[Argument] = []
         self._inp_attrs: list[str] = []
-        self._inp_lgg = None
-        self._outp_lgg = None
         self.inp_facts: list[str] = []
         self.test_facts: list[str] = []
         self.deters: list[str] = []
@@ -96,15 +92,7 @@ class AlephSwipl(Solver):
         self._train_file = dname + "train.pl"
         self._rules_file = dname + "rules.pl"
 
-    @property
-    def outp_consts(self) -> dict:
-        return {k: v for k, v in self._outp_lgg.items() if v != lgg.VAR}
-
-    @property
-    def inp_consts(self) -> dict:
-        return {k: v for k, v in self._inp_lgg.items() if v != lgg.VAR}
-
-    def _map_args(self, args: list[Argument]) -> list[list[str]]:
+    def _args2aleph_types(self, args: list[Argument]) -> list[list[str]]:
         args_ext: list[list[Argument]] = []
         for arg in args:
             if arg.direction == Directions.INOUT:
@@ -128,28 +116,28 @@ class AlephSwipl(Solver):
         )
 
     def _modes_head(self, sample: dict) -> None:
-        self._outp_attrs = sorted(sample.keys() - self.outp_consts.keys())
+        self._outp_attrs = sorted(sample.keys())
         self._outp_args = self._map_types2args(
             sample, self._outp_attrs, {"int": Directions.IN, "str": Directions.CONST}
         )
         self._outp_args.append(Argument(type=Types.EID, direction=Directions.IN))
-        args = self._map_args(self._outp_args)[0]
-        self.modes.append(make_mode(OUT_PRED, "h", args))
+        args_aleph = self._args2aleph_types(self._outp_args)[0]
+        self.modes.append(make_mode(OUT_PRED, "h", args_aleph))
 
     def _modes_bg(self) -> None:
         for c in self.bg:
             pred = BASE_BG_ARGS[c]
-            for arg_list in self._map_args(pred.args):
+            for arg_list in self._args2aleph_types(pred.args):
                 self.modes.append(make_mode(pred.name, "b", arg_list, 2))
             self._add_deter(pred.name, len(pred.args))
 
     def _modes_inp(self, sample: dict) -> None:
-        self._inp_attrs = sorted(sample.keys() - self.inp_consts.keys())
+        self._inp_attrs = sorted(sample.keys())
         self._inp_args = self._map_types2args(
             sample, self._inp_attrs, {"int": Directions.INOUT, "str": Directions.CONST}
         )
         self._inp_args.append(Argument(type=Types.EID, direction=Directions.OUT))
-        args = self._map_args(self._inp_args)
+        args = self._args2aleph_types(self._inp_args)
         for arg_list in args:
             self.modes.append(make_mode(INP_PRED, "b", arg_list))
         self._add_deter(INP_PRED, len(self._inp_args))
@@ -164,12 +152,7 @@ class AlephSwipl(Solver):
             _res.append(Argument(type=Types(t), direction=d))
         return _res
 
-    def _lggs(self, inputs: LLD, outputs: LLD) -> None:
-        self._inp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in inputs))
-        self._outp_lgg = lgg.lgg_dict(list(lgg.lgg_dict(e) for e in outputs))
-
     def _gen_data(self, inputs: LLD, outputs: LLD) -> None:
-        self._lggs(inputs, outputs)
         self._modes_head(outputs[0][0])
         self._modes_bg()
         self._modes_inp(inputs[0][0])
@@ -231,7 +214,8 @@ class AlephSwipl(Solver):
         if not self.success:
             raise RuntimeError("The solver has no solution.")
 
-        self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs)
+        start = self._tf.len_x() + 1
+        self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs, start=start)
 
         with open(self._rules_file, "r", encoding="utf-8") as frules:
             rules = frules.readlines()
@@ -244,7 +228,10 @@ class AlephSwipl(Solver):
             tfile.write("\n".join(self.test_facts) + "\n")
             _vars = [chr(x) for x in range(ord("A"), ord("A") + len(self._outp_args))]
             _vars = ",".join(_vars)
-            tfile.write(f":-setof(({_vars}),{OUT_PRED}({_vars}),L1),print(L1).")
+            tfile.write(
+                f":-setof(({_vars}),({OUT_PRED}({_vars}),{_vars[-1]}>={start}),L1),"
+                + "print(L1)."
+            )
 
         stdout, stderr = self._run_swipl(tfile.name, "halt", timeout=1)
         if not stderr and stdout:
@@ -252,11 +239,9 @@ class AlephSwipl(Solver):
             res = defaultdict(list)
             for t in test_ans:
                 eid = t[-1]
-                _d = self._outp_lgg.copy()
-                for k, v in _d.items():
-                    if v == lgg.VAR:
-                        i = self._outp_attrs.index(k)
-                        _d[k] = t[i]
+                _d = {}
+                for i, k in enumerate(self._outp_attrs):
+                    _d[k] = t[i]
                 res[eid].append(_d)
             finalres = [res[k] for k in sorted(res.keys())]
             self.logger.debug("final res %s", str(finalres))
