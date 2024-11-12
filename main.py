@@ -51,6 +51,7 @@ def process_task(task: RawTaskData, task_name, log_level):
     logger = logging.getLogger(lname)
     logger.info("Start task %s", task_name)
     ts = TaskSearch(task, parent_logger=lname)
+    ts.init()
     ts.search_topdown()
     pred = ts.test()
     res = []

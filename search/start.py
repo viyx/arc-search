@@ -24,6 +24,9 @@ class TaskSearch:
         self.xdag = DAG(parent_logger=parent_logger)
         self.ydag = DAG(parent_logger=parent_logger)
         self.task = task
+        self._reset()
+
+    def _reset(self) -> None:
         self.success = False
         self.q = PriorityQueue()
         self.closed = set()
@@ -58,7 +61,8 @@ class TaskSearch:
                 self.q.put((d, xnode, ynode, exclude, include))
                 self.logger.debug("put node %s", (d, xnode, ynode, exclude, include))
 
-    def _init_search(self) -> None:
+    def init(self) -> None:
+        self._reset()
         make_dump_regions = INIT_ACTION
         xnode = self.xdag.try_add_node(
             make_dump_regions,
@@ -77,7 +81,6 @@ class TaskSearch:
         self._put({xnode}, {ynode}, exclude=frozenset(), include=frozenset())
 
     def search_topdown(self) -> None:
-        self._init_search()
         i = 0
         while self.q.qsize() != 0 and not self.success and i < 1000:
             i += 1

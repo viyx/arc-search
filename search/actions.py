@@ -126,13 +126,16 @@ def next_actions_r(r: Region) -> set[Action]:
 
 
 @lru_cache
-def extract_flat(action: Action, bags: tuple[Bag]) -> tuple[Bag]:
+def extract_flat(
+    action: Action, bags: tuple[Bag], *, hard_extract: bool = False
+) -> tuple[Bag]:
     "Extract bag for each region and merge."
     new_bags = []
     for b in bags:
         _bags = []
         for r in b.regions:
-            if action not in next_actions_r(r):
+            if not hard_extract and action not in next_actions_r(r):
+                # miss action
                 rbag = Bag(regions=[r])
             else:
                 rbag = action(data=r.raw_view)

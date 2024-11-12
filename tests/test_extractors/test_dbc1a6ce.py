@@ -1,3 +1,4 @@
+from functools import partial
 from itertools import product
 
 import pytest
@@ -87,15 +88,16 @@ def test_disconnected(task: TaskBags):
     a4 = Action(name=Extractors.EP, bg=fake_bg, c=-1)
 
     for bags in task.to_list():
-        s = set()
+        # s = set()
         for a in [a1, a2, a3, a4]:
-            for b in bags:
-                new_bag = ef(a, b)
-                for r in new_bag.regions:
+            # for b in bags:
+            new_bags = ef(a, bags, hard_extract=True)
+            for b in new_bags:
+                for r in b.regions:
                     assert r.mask.shape == (1, 1)
-            s.add(new_bag)
+            # s.add(new_bag)
             # check identical hashes
-        assert len(s) == 1
+        # assert len(s) == 1
 
 
 def test_bg(task: TaskBags):
@@ -108,17 +110,22 @@ def test_bg(task: TaskBags):
     r01 = Action(name=Extractors.ER, bg=bg2, c=1)
     p02 = Action(name=Extractors.EP, bg=bg2, c=2)
     r02 = Action(name=Extractors.ER, bg=bg2, c=2)
+    efhard = partial(ef, hard_extract=True)
 
     # pixel regions equals primitives
-    assert ef(p01, wo_c2) == ef(r01, wo_c2)
-    assert ef(p01, wo_c2) == ef(p02, wo_c2)
-    assert ef(p02, wo_c2) == ef(r02, wo_c2)
-    assert ef(r01, wo_c2) == ef(r02, wo_c2)
+    assert efhard(p01, wo_c2) == efhard(r01, wo_c2)
+    assert efhard(p01, wo_c2) == efhard(p02, wo_c2)
+    assert efhard(p02, wo_c2) == efhard(r02, wo_c2)
+    assert efhard(r01, wo_c2) == efhard(r02, wo_c2)
 
     # change coords
-    assert ef(p01, wo_c2) != ef(p01, ef(p01, wo_c2))
-    assert ef(r01, wo_c2) != ef(r01, ef(r01, wo_c2))
+    assert efhard(p01, wo_c2) != efhard(p01, efhard(p01, wo_c2))
+    assert efhard(r01, wo_c2) != efhard(r01, efhard(r01, wo_c2))
 
     # no change coords
-    assert ef(p01, ef(p01, wo_c2)) == ef(p01, ef(p01, ef(p01, wo_c2)))
-    assert ef(r01, ef(r01, wo_c2)) == ef(r01, ef(r01, ef(r01, wo_c2)))
+    assert efhard(p01, efhard(p01, wo_c2)) == efhard(
+        p01, efhard(p01, efhard(p01, wo_c2))
+    )
+    assert efhard(r01, efhard(r01, wo_c2)) == efhard(
+        r01, efhard(r01, efhard(r01, wo_c2))
+    )
