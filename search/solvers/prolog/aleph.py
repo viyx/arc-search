@@ -64,7 +64,13 @@ def extract_max_rule(data: str) -> int | None:
 
 class AlephSwipl(Solver):
     def __init__(
-        self, tf: TaskMetaFeatures, *, bg: list[str], opt_neg_n: int, timeout: int
+        self,
+        tf: TaskMetaFeatures,
+        *,
+        bg: list[str],
+        opt_neg_n: int,
+        timeout: int,
+        parent_logger: str,
     ):
         super().__init__(tf)
         self.bg = bg
@@ -80,7 +86,7 @@ class AlephSwipl(Solver):
         self.pos: list[str] = []
         self.neg: list[str] = []
         self.prolog_prog: str = ""
-        self.logger = logging.getLogger("app.aleph")
+        self.logger = logging.getLogger(parent_logger + ".aleph")
         self.timeout = timeout
 
         t = datetime.now().strftime("%H_%M_%S_%f")

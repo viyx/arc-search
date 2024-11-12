@@ -17,11 +17,12 @@ INIT_ACTION = A.INIT_ACTIONS[0]
 
 
 class TaskSearch:
-    def __init__(self, task: RawTaskData) -> None:
-        self.logger = logging.getLogger("app.search")
+    def __init__(self, task: RawTaskData, *, parent_logger: str) -> None:
+        self._parent_logger = parent_logger
+        self.logger = logging.getLogger(parent_logger + ".search")
         self.load_testy = True  # ??
-        self.xdag = DAG()
-        self.ydag = DAG()
+        self.xdag = DAG(parent_logger=parent_logger)
+        self.ydag = DAG(parent_logger=parent_logger)
         self.task = task
         self.success = False
         self.q = PriorityQueue()
@@ -80,7 +81,7 @@ class TaskSearch:
         i = 0
         while self.q.qsize() != 0 and not self.success and i < 1000:
             i += 1
-            self.logger.debug(
+            self.logger.info(
                 "step %s: size(q, x, y) = (%s, %s, %s)",
                 i,
                 self.q.qsize(),
@@ -91,8 +92,14 @@ class TaskSearch:
             tbag = TaskBags.from_tuples(
                 *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
             )
-            ans = main_pipe(tbag, exclude=exclude, include=include)
-            self.closed.add((xnode, ynode, exclude))
+            self.logger.info("Starting pipe, xnode=%s, ynode=%s", xnode, ynode)
+            ans = main_pipe(
+                tbag,
+                exclude=exclude,
+                include=include,
+                parent_logger=self._parent_logger,
+            )
+            self.closed.add((xnode, ynode, exclude, include))
             if not ans:
                 self._expand(tbag, xnode, ynode)
                 continue
@@ -140,9 +147,8 @@ class TaskSearch:
         prev_acts_y = self.ydag.get_actions_upstream(ynode)
         prev_acts_x = self.xdag.get_actions_upstream(xnode)
 
-        # xnew_acts = A.next_actions(tbag.x, [], False) - xclos
-        xnew_acts = A.next_actions(tbag.x, prev_acts_x, True) - xclos
-        ynew_acts = A.next_actions(tbag.y, prev_acts_y, True) - yclos
+        xnew_acts = A.next_actions(tbag.x, prev_acts_x, determinate=True) - xclos
+        ynew_acts = A.next_actions(tbag.y, prev_acts_y, determinate=True) - yclos
 
         new_xnodes = self._add_nodes(self.xdag, xnew_acts, xnode, tbag.x, tbag.x_test)
         new_ynodes = self._add_nodes(self.ydag, ynew_acts, ynode, tbag.y, tbag.y_test)

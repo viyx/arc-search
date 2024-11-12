@@ -1,5 +1,6 @@
 import json
-from abc import ABC
+import os
+from abc import ABC, abstractmethod
 from typing import Iterator
 
 import numpy as np
@@ -7,27 +8,27 @@ import numpy as np
 
 class TaskLayout(ABC):
     @property
-    # @abstractmethod
+    @abstractmethod
     def train_x(self) -> list:
         ...
 
     @property
-    # @abstractmethod
+    @abstractmethod
     def train_y(self) -> list:
         ...
 
     @property
-    # @abstractmethod
+    @abstractmethod
     def train_xy(self) -> Iterator[tuple]:
         ...
 
     @property
-    # @abstractmethod
+    @abstractmethod
     def test_x(self) -> list:
         ...
 
     @property
-    # @abstractmethod
+    @abstractmethod
     def test_y(self) -> list | None:
         ...
 
@@ -76,8 +77,8 @@ class ARCDataset:
         self._on_submition = on_submition
 
     @property
-    def task_files(self) -> list[str]:
-        return self._task_files
+    def task_names(self) -> list[str]:
+        return [os.path.basename(f).split(".")[0] for f in self._task_files]
 
     def __len__(self) -> int:
         return len(self._task_files)

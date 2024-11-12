@@ -13,9 +13,9 @@ from search.actions import Action
 
 
 class DAG:
-    def __init__(self) -> None:
+    def __init__(self, parent_logger: str) -> None:
         self.g = DiGraph()
-        self.logger = logging.getLogger("app.graph")
+        self.logger = logging.getLogger(parent_logger + ".graph")
 
     def _filter_nodes_by(self, attr: str, value: Any) -> set[str]:
         attrs = self.g.nodes.data(attr)

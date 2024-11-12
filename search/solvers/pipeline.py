@@ -26,11 +26,18 @@ def validate_answer(data: SSD) -> bool:
 
 # TODO: Cache prediction??, cache transformations
 class Pipeline(Solver):
-    def __init__(self, tf: TaskMetaFeatures, steps: list[Transformer | Solver]):
+    def __init__(
+        self,
+        tf: TaskMetaFeatures,
+        *,
+        steps: list[Transformer | Solver],
+        parent_logger: str,
+    ):
         super().__init__(tf)
         self.steps = steps
         self.success_step = None
-        self.logger = logging.getLogger("app.pipe")
+        self.logger = logging.getLogger(parent_logger + ".pipe")
+        self._parent_logger = parent_logger
 
     def solve(self, x, y):
         raise NotImplementedError()
@@ -81,7 +88,11 @@ class Pipeline(Solver):
 
 
 def main_pipe(
-    task: TaskBags, *, exclude: set[str] | None = None, include: set[str] | None = None
+    task: TaskBags,
+    *,
+    parent_logger: str,
+    exclude: set[str] | None = None,
+    include: set[str] | None = None,
 ) -> SSD | None:
     tf = TaskMetaFeatures(task, exclude=exclude, include=include)
     if exclude or (tf.all_y_pixels and tf.all_x_pixels):
@@ -91,6 +102,7 @@ def main_pipe(
                 Dictionarizer(exclude=exclude, include=include),
                 PrimitiveSolver(tf),
             ],
+            parent_logger=parent_logger,
         )
         if pipe_prim.solve_validate(task.x, task.y, task.x_test):
             return pipe_prim.predict(task.x_test)
@@ -103,8 +115,15 @@ def main_pipe(
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=0, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=100, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=1000, timeout=60),
-                AlephSwipl(tf, bg=BASE_BG, opt_neg_n=5000, timeout=200),
+                AlephSwipl(
+                    tf,
+                    bg=BASE_BG,
+                    opt_neg_n=5000,
+                    timeout=200,
+                    parent_logger=parent_logger,
+                ),
             ],
+            parent_logger=parent_logger,
         )
         if pipe_prolog.solve_validate(task.x, task.y, task.x_test):
             return pipe_prolog.predict(task.x_test)

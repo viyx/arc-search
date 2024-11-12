@@ -56,12 +56,8 @@ class Action(BaseModel):
         return hash(str([self.name, self.bg, self.c]))
 
 
-def filter_nobg_actions(actions: set[Action]) -> set[Action]:
-    return set(a for a in actions if is_nobg_action(a))
-
-
-def is_nobg_action(action: Action) -> bool:
-    return action.bg == NO_BG
+def filter_actions_by_bg(actions: set[Action], bg: int) -> set[Action]:
+    return set(a for a in actions if a.bg == bg)
 
 
 @lru_cache
@@ -81,37 +77,40 @@ INIT_ACTIONS = [
 
 
 def next_actions(
-    bags: tuple[Bag], prev_actions: list[Action], determinate: bool
+    bags: tuple[Bag], prev_actions: list[Action], *, determinate: bool
 ) -> set[Action]:
-    acts = _all_actions()
+    det_acts = _all_actions()
+    # don't allow to apply second bg as it is irreversible operation
     if determinate and any(a.bg != NO_BG for a in prev_actions):
-        acts = filter_nobg_actions(acts)
+        det_acts = filter_actions_by_bg(det_acts, NO_BG)
 
-    res = set()
+    acts = set()
+    voids = set()
     for b in bags:
         for r in b.regions:
-            res.update(next_actions_r(r, determinate))
-    return res & acts
+            acts.update(next_actions_r(r))
+            voids.update(void_color(r))
+    acts = {a for a in acts if a.bg not in voids}
+    return acts & det_acts
+
+
+def void_color(r: Region) -> set[int]:
+    if r.is_one_colored:
+        return {r.unq_colors[0]}
+    return set()
 
 
 @lru_cache
-def next_actions_r(r: Region, remove_parts: bool) -> set[Action]:
+def next_actions_r(r: Region) -> set[Action]:
     to_pixel = Action(name=Extractors.ER, bg=NO_BG, c=NO_CONN)
-    to_void = Action(name=Extractors.ER, bg=r.unq_colors[0], c=FOUR_CONN)
-    for_one_colored = set()
-    if r.mask.shape == (1, 1):  # pixel
-        for_one_colored = {to_void}
-    elif r.is_primitive:  # not pixel
-        for_one_colored = {to_pixel, to_void}
-    elif r.is_one_colored:  # not primitive
-        for_one_colored = {to_pixel, to_void}
+    if r.is_one_colored:
+        return {to_pixel}
         # add Action(name=Extractors.EP, bg=-1, c=1)??
         # give bugs if -1 is not supported in Region.raw_data
         # potentially split 8conn-primitive to a few 4conn-primitives;
         # temporary excluded as the action should already be in
         # graph, as 4,8conn are always added together
-    if for_one_colored:
-        return for_one_colored - {to_void} if remove_parts else for_one_colored
+
     for_many_colored = set()
     for color in r.unq_colors:
         for conn in CONNECTIVITY:
@@ -133,7 +132,7 @@ def extract_flat(action: Action, bags: tuple[Bag]) -> tuple[Bag]:
     for b in bags:
         _bags = []
         for r in b.regions:
-            if action not in next_actions_r(r, False):
+            if action not in next_actions_r(r):
                 rbag = Bag(regions=[r])
             else:
                 rbag = action(data=r.raw_view)
