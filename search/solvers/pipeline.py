@@ -24,7 +24,8 @@ def validate_answer(data: SSD) -> bool:
     return True
 
 
-# TODO: Cache prediction??, cache transformations
+# TODO remove double call of `predict`, remove Solver??
+# TODO Cache prediction??, cache transformations
 class Pipeline(Solver):
     def __init__(
         self,

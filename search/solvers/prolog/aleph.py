@@ -22,6 +22,8 @@ ALEPH_START = """:- use_module('../../aleph').
 :- ['../../aleph_prune'].
 :- style_check(-discontiguous).
 :- aleph_set(check_redundant,true).
+:- aleph_set(check_useless,true).
+:- aleph_set(samplesize,3).
 :- aleph_set(clauselength,5).
 """
 

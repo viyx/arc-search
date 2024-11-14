@@ -646,7 +646,7 @@ in_path(_,_M).
 update_equivs([],_,_M):- !.
 update_equivs(Equivs,Depth,M):-
 	retract(M:'$aleph_sat_varsequiv'(Depth,Eq1)), !,
-	update_equiv_lists(Equivs,Eq1,Eq2),
+	update_equiv_lists(Equivs,Eq1,Eq2,M),
 	asserta(M:'$aleph_sat_varsequiv'(Depth,Eq2)).
 update_equivs(Equivs,Depth,M):-
 	Depth1 is Depth - 1,
@@ -654,13 +654,13 @@ update_equivs(Equivs,Depth,M):-
 	update_equiv_lists(Equivs,Eq1,Eq2,M),
 	asserta(M:'$aleph_sat_varsequiv'(Depth,Eq2)).
 
-update_equiv_lists([],E,E):- !.
-update_equiv_lists([Var/E1|Equivs],ESoFar,E):-
+update_equiv_lists([],E,E,_):- !.
+update_equiv_lists([Var/E1|Equivs],ESoFar,E,M):-
 	aleph_delete(Var/E2,ESoFar,ELeft), !,
 	update_list(E1,E2,E3),
-	update_equiv_lists(Equivs,[Var/E3|ELeft],E).
-update_equiv_lists([Equiv|Equivs],ESoFar,E):-
-	update_equiv_lists(Equivs,[Equiv|ESoFar],E).
+	update_equiv_lists(Equivs,[Var/E3|ELeft],E,M).
+update_equiv_lists([Equiv|Equivs],ESoFar,E,M):-
+	update_equiv_lists(Equivs,[Equiv|ESoFar],E,M).
 
 % get variable equivalences at a particular depth
 % recursively descend to greatest depth below this for which equivs exist
@@ -1254,7 +1254,7 @@ rename_ovars([ArgNo|Args],Depth,Old,New,CoRefs,Equivalences):-
 	(ArgNo = Pos/_ -> true; Pos = ArgNo),
 	tparg(Pos,Old,OldVar),
 	aleph_delete(OldVar/Equiv,CoRefs,Rest), !,
-	copy_var(OldVar,NewVar,Depth),
+	copy_var(OldVar,NewVar,Depth,user),
 	tparg(Pos,New,NewVar),
 	rename_ovars(Args,Depth,Old,New,[OldVar/[NewVar|Equiv]|Rest],Equivalences).
 rename_ovars([ArgNo|Args],Depth,Old,New,CoRefs,Equivalences):-
@@ -1280,7 +1280,7 @@ add_eqs([],_,_,_,L,L,_M).
 add_eqs([Var2|Rest],Depth,Var1,Type,Last,NewLast,M):-
 	(Depth = 0 -> 
 		add_lit(Last,false,(Var1=Var2),[1/Type],[2/Type],[Var1],[Var2],Last1,M);
-		add_lit(Last,false,(Var1=Var2),[1/Type,2/Type],[],[Var1,Var2],[],Last1),M),
+		add_lit(Last,false,(Var1=Var2),[1/Type,2/Type],[],[Var1,Var2],[],Last1,M)),
 	add_eqs(Rest,Depth,Var1,Type,Last1,NewLast,M).
 	
 

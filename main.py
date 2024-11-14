@@ -13,14 +13,14 @@ from search.start import TaskSearch
 APP_LOGGER = "app"
 
 
-def config_logger(level: str, appender: str) -> str:
-    logger_name = f"{APP_LOGGER}.{appender}"
+def config_logger(level: str, name: str) -> str:
+    logger_name = f"{APP_LOGGER}.{name}"
     logger = logging.getLogger(logger_name)
     logger.setLevel(level.upper())
 
     console_handler = logging.StreamHandler()
     day, secs = strftime("%m_%d_%Y"), strftime("%H_%M_%S")
-    fname = f"./logs/{day}/app_{appender}_{secs}.log"
+    fname = f"./logs/{day}/app_{name}_{secs}.log"
 
     if not os.path.exists(os.path.dirname(fname)):
         os.makedirs(os.path.dirname(fname))
@@ -114,6 +114,8 @@ def main():
                 except mp.TimeoutError:
                     logger.error("Task %s timed out", name)
                     continue
+                except NotImplementedError as e:
+                    logger.error(e, name)
 
 
 if __name__ == "__main__":

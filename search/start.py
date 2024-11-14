@@ -45,7 +45,7 @@ class TaskSearch:
         *,
         exclude: frozenset[str],
         include: frozenset[str],
-        hard_dist: float | None = None
+        hard_dist: float | None = None,
     ) -> None:
         if len(xnodes) > 0 and len(ynodes) > 0:
             new_pairs = set(product(xnodes, ynodes, [exclude], [include]))
@@ -95,19 +95,21 @@ class TaskSearch:
             tbag = TaskBags.from_tuples(
                 *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
             )
-            self.logger.info("Starting pipe, xnode=%s, ynode=%s", xnode, ynode)
-            ans = main_pipe(
-                tbag,
-                exclude=exclude,
-                include=include,
-                parent_logger=self._parent_logger,
-            )
+            if not (ans := self.ydag.get_solution(ynode)):
+                self.logger.info("Starting pipe, xnode=%s, ynode=%s", xnode, ynode)
+                ans = main_pipe(
+                    tbag,
+                    exclude=exclude,
+                    include=include,
+                    parent_logger=self._parent_logger,
+                )
+                if ans:
+                    self.ydag.set_solution(ynode, ans, tbag.collect_hashes())
             self.closed.add((xnode, ynode, exclude, include))
             if not ans:
                 self._expand(tbag, xnode, ynode)
                 continue
 
-            self.ydag.set_solution(ynode, ans, tbag.collect_hashes())
             if ynode == self.ydag.init_node:
                 self.success = True
                 continue
