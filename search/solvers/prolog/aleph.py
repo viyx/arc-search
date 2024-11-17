@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 from ast import literal_eval
 from collections import defaultdict
 from collections.abc import Sequence
@@ -23,11 +24,14 @@ ALEPH_START = """:- use_module('../../aleph').
 :- style_check(-discontiguous).
 :- aleph_set(check_redundant,true).
 :- aleph_set(check_useless,true).
-:- aleph_set(samplesize,3).
+:- aleph_set(samplesize,4).
 :- aleph_set(clauselength,5).
+:- aleph_set(minpos,2).
+:- aleph_set(verbosity,0).
 """
 
-#   TODO Create specific Transformer for Aleph input. Add #eid to the end of regions
+# TODO Create specific Transformer for Aleph input. Add #eid to the ends of regions.
+# TODO Cancel answers with constant predicates outp(...) since they indicate failure.
 
 
 # Change these consts carefully, they are used in aleph_prune.pl
@@ -64,7 +68,7 @@ def extract_max_rule(data: str) -> int | None:
     return None
 
 
-class AlephSwipl(Solver):
+class AlephSWI(Solver):
     def __init__(
         self,
         tf: TaskMetaFeatures,
@@ -192,7 +196,11 @@ class AlephSwipl(Solver):
 """
 
     def solve(self, x: SSD, y: SSD) -> bool:
-        self.logger.debug("Start solving, params: %s", [self.opt_neg_n, self.timeout])
+        self.logger.debug(
+            "Start with `timeout`(=%s) and `opt_neg_n`(=%s)",
+            self.timeout,
+            self.opt_neg_n,
+        )
         self.compose_train(x, y)
         with open(self._train_file, "w", encoding="utf8") as f:
             f.write(self.prolog_prog)
@@ -204,19 +212,24 @@ class AlephSwipl(Solver):
         )
         if stderr1 or not stdout1:
             return False
+        acc = extract_accuracy(stdout1)
+        max_rule = extract_max_rule(stdout1)
+        if acc != 1 or max_rule >= len(self.pos):
+            self.logger.info(
+                "Failure due to incorrect `accuracy`(=%s) or number of `rules`(=%s)",
+                acc,
+                max_rule,
+            )
+            return False
 
         # simple running for checking errors and singletons
         _, stderr2 = self._run_swipl(self._rules_file, "halt", timeout=1)
         if stderr2:
+            self.logger.error(stderr2)
             return False
 
-        acc = extract_accuracy(stdout1)
-        max_rule = extract_max_rule(stdout1)
-        if acc == 1 and max_rule <= len(self.pos):
-            self.success = True
-            return True
-
-        return False
+        self.success = True
+        return True
 
     def predict(self, x) -> SSD:
         if not self.success:
@@ -260,6 +273,9 @@ class AlephSwipl(Solver):
         self, fname: str, goal: str, *, timeout: int
     ) -> tuple[str | None, str | None]:
         process = None
+        stdout_lines = []
+        stderr_lines = []
+
         try:
             args = ["swipl", "-q", "-f", fname, "-g", goal]
             process = subprocess.Popen(
@@ -269,15 +285,37 @@ class AlephSwipl(Solver):
                 stderr=subprocess.PIPE,
             )
             self.logger.info("Starting SWI-Prolog process, args: %s", args)
-            stdout, stderr = process.communicate(timeout=timeout)
-            self.logger.debug("stdout: %s", stdout)
-            if stderr:
-                self.logger.error(stderr)
+
+            def read_stdout():
+                for stdout_line in iter(process.stdout.readline, ""):
+                    self.logger.debug("stdout: %s", stdout_line.strip())
+                    stdout_lines.append(stdout_line)
+
+            def read_stderr():
+                for stderr_line in iter(process.stderr.readline, ""):
+                    self.logger.error("stderr: %s", stderr_line.strip())
+                    stderr_lines.append(stderr_line)
+
+            stdout_thread = threading.Thread(target=read_stdout)
+            stderr_thread = threading.Thread(target=read_stderr)
+            stdout_thread.start()
+            stderr_thread.start()
+
+            process.wait(timeout=timeout)
+
+            stdout_thread.join()
+            stderr_thread.join()
+
             self.logger.info("Finished SWI-Prolog process")
+
+            stdout = "".join(stdout_lines) if stdout_lines else None
+            stderr = "".join(stderr_lines) if stderr_lines else None
+
             return stdout, stderr
         except subprocess.TimeoutExpired as e:
             self.logger.error("SWI-Prolog process timed out: %s", e)
+            process.kill()
             return None, None
         finally:
-            if process:
+            if process and process.poll() is None:
                 process.kill()

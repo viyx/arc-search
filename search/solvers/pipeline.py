@@ -2,30 +2,18 @@ import logging
 from collections.abc import Sequence
 from copy import copy
 
-from reprs.primitives import Region, TaskBags
+from reprs.primitives import TaskBags
+from reprs.validation import validate_positions
 from search.solvers.base import Dictionarizer, PrimitiveSolver, Solver, Transformer
 from search.solvers.metafeatures import TaskMetaFeatures
-from search.solvers.prolog.aleph import AlephSwipl
+from search.solvers.prolog.aleph import AlephSWI
 from search.solvers.prolog.bg import BASE_BG
 
 SSD = Sequence[Sequence[dict]]
 
 
-def validate_answer(data: SSD) -> bool:
-    poskeys = Region.position_props()
-    for x in data:
-        grid = {}
-        for r in x:
-            pos = frozenset((k, v) for k, v in r.items() if k in poskeys)
-            _data = set((k, v) for k, v in r.items() if k not in poskeys)
-            if pos in grid and grid[pos] != _data:
-                return False
-            grid[pos] = _data
-    return True
-
-
-# TODO remove double call of `predict`, remove Solver??
-# TODO Cache prediction??, cache transformations
+# TODO remove double call of `predict`, remove Solver
+# TODO Cache prediction, cache transformations, move to sklearn api
 class Pipeline(Solver):
     def __init__(
         self,
@@ -56,7 +44,7 @@ class Pipeline(Solver):
                 try:
                     if s.solve(_x, _y):
                         _ytest = s.predict(_xtest)
-                        if validate_answer(_ytest):
+                        if validate_positions(_ytest):
                             self.success = True
                             self.success_step = i
                             return True
@@ -116,7 +104,7 @@ def main_pipe(
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=0, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=100, timeout=30),
                 # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=1000, timeout=60),
-                AlephSwipl(
+                AlephSWI(
                     tf,
                     bg=BASE_BG,
                     opt_neg_n=5000,
