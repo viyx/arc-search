@@ -102,7 +102,6 @@ please contact Ashwin Srinivasan first.                                 %
 @author Ashwin Srinivasan, Fabrizio Riguzzi and Paolo Niccolò Giubelli.
 @copyright Ashwin Srinivasan
 */
-:-encoding(utf8).
 :-use_module(library(arithmetic)). 
 :-use_module(library(broadcast)).
 :-use_module(library(time)).
