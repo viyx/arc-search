@@ -22,13 +22,12 @@ ALEPH_START = """:- use_module('../../aleph').
 :- aleph.
 :- ['../../aleph_prune'].
 :- style_check(-discontiguous).
-:- enconding('utf8').
 :- aleph_set(check_redundant,true).
 :- aleph_set(check_useless,true).
 :- aleph_set(samplesize,4).
 :- aleph_set(clauselength,5).
 :- aleph_set(minpos,2).
-:- aleph_set(verbosity,1).
+:- aleph_set(verbosity,0).
 """
 
 # TODO Create specific Transformer for Aleph input. Add #eid to the ends of regions.
@@ -198,12 +197,12 @@ class AlephSWI(Solver):
 
     def solve(self, x: SSD, y: SSD) -> bool:
         self.logger.debug(
-            "Start with `timeout`(=%s) and `opt_neg_n`(=%s)",
+            "Start solving with `timeout`(=%s) and `opt_neg_n`(=%s)",
             self.timeout,
             self.opt_neg_n,
         )
         self.compose_train(x, y)
-        with open(self._train_file, "w", encoding="utf8") as f:
+        with open(self._train_file, "w", encoding="ascii") as f:
             f.write(self.prolog_prog)
 
         # train and write rules
@@ -217,7 +216,7 @@ class AlephSWI(Solver):
         max_rule = extract_max_rule(stdout1)
         if acc != 1 or max_rule >= len(self.pos):
             self.logger.info(
-                "Failure due to incorrect `accuracy`(=%s) or number of `rules`(=%s)",
+                "Failure due to non perfect `accuracy`(=%s) or number of `rules`(=%s)",
                 acc,
                 max_rule,
             )
@@ -239,7 +238,7 @@ class AlephSWI(Solver):
         start = self._tf.len_x() + 1
         self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs, start=start)
 
-        with open(self._rules_file, "r", encoding="utf-8") as frules:
+        with open(self._rules_file, "r", encoding="ascii") as frules:
             rules = frules.readlines()
 
         with tempfile.NamedTemporaryFile(
@@ -285,7 +284,7 @@ class AlephSWI(Solver):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            self.logger.info("Starting SWI-Prolog process, args: %s", args)
+            self.logger.debug("Starting SWI-Prolog process, args: %s", args)
 
             def read_stdout():
                 for stdout_line in iter(process.stdout.readline, ""):
@@ -307,7 +306,7 @@ class AlephSWI(Solver):
             stdout_thread.join()
             stderr_thread.join()
 
-            self.logger.info("Finished SWI-Prolog process")
+            self.logger.debug("Finished SWI-Prolog process")
 
             stdout = "".join(stdout_lines) if stdout_lines else None
             stderr = "".join(stderr_lines) if stderr_lines else None
