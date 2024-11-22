@@ -22,12 +22,13 @@ ALEPH_START = """:- use_module('../../aleph').
 :- aleph.
 :- ['../../aleph_prune'].
 :- style_check(-discontiguous).
+:- enconding('utf8').
 :- aleph_set(check_redundant,true).
 :- aleph_set(check_useless,true).
 :- aleph_set(samplesize,4).
 :- aleph_set(clauselength,5).
 :- aleph_set(minpos,2).
-:- aleph_set(verbosity,0).
+:- aleph_set(verbosity,1).
 """
 
 # TODO Create specific Transformer for Aleph input. Add #eid to the ends of regions.
