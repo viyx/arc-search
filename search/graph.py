@@ -8,7 +8,7 @@ from reprs.primitives import Bag
 from search.actions import Action
 
 # TODO
-# Add constants
+# Add constants for nodes attributes
 # Add datatype for solutions
 
 

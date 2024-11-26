@@ -89,7 +89,7 @@ def main():
     tasks = glob.glob(args.files)
     ds = ARCDataset(tasks)
 
-    # TODO timeout
+    # TODO timeout for single process
     if args.processes == 1:
         for i, name in enumerate(ds.task_names):
             try:

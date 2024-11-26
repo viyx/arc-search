@@ -35,9 +35,9 @@ def extract_regions(data: np.ndarray, bg: int, c: int) -> Bag:
         xs, ys = np.where(_mask)
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
 
-        _d = data[xmin : xmax + 1, ymin : ymax + 1]
-        _b = np.full_like(_d, True, dtype=bool)
-        r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
+        d = data[xmin : xmax + 1, ymin : ymax + 1]
+        m = np.full_like(d, True, dtype=bool)
+        r = Region(x=xmin, y=ymin, raw=d, mask=m)
         regions.append(r)
     return Bag(regions=tuple(regions))
 
@@ -46,14 +46,14 @@ def extract_prims(data: np.ndarray, c: int, bg: int) -> Bag:
     comps, ncomps = _label(data, c, bg)
     regions = []
     for i in range(1, ncomps + 1):
-        _mask = comps == i
+        mask = comps == i
 
         # find bounding rectangle
-        xs, ys = np.where(_mask)
+        xs, ys = np.where(mask)
         xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
 
-        _d = data[xmin : xmax + 1, ymin : ymax + 1]
-        _b = _mask[xmin : xmax + 1, ymin : ymax + 1]
-        r = Region(x=xmin, y=ymin, raw=_d, mask=_b)
+        d = data[xmin : xmax + 1, ymin : ymax + 1]
+        m = mask[xmin : xmax + 1, ymin : ymax + 1]
+        r = Region(x=xmin, y=ymin, raw=d, mask=m)
         regions.append(r)
     return Bag(regions=tuple(regions))

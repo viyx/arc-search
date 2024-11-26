@@ -67,7 +67,9 @@ class Transformer(ABC):
 
 
 class Dictionarizer(Transformer):
-    def __init__(self, *, exclude: set[str] | None, include: set[str] | None):
+    def __init__(
+        self, *, exclude: set[str] | None = None, include: set[str] | None = None
+    ):
         self.exclude = exclude
         self.include = include
 

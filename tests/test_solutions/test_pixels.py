@@ -18,16 +18,14 @@ def test(task):
         s.xdag, {action}, s.xdag.init_node, *s.xdag.get_data(s.xdag.init_node)
     )
     ys = s._add_nodes(
-        s.ydag, {action}, s.ydag.init_node, *s.ydag.get_data(s.xdag.init_node)
+        s.ydag, {action}, s.ydag.init_node, *s.ydag.get_data(s.ydag.init_node)
     )
     s._put(
         {s.xdag.init_node},
         {s.ydag.init_node},
-        include=frozenset(),
-        exclude=frozenset(),
         hard_dist=-1,
     )
-    s._put(xs, ys, include=frozenset(), exclude=frozenset(), hard_dist=-1)
+    s._put(xs, ys, hard_dist=-1)
     s.search_topdown()
     assert s.success
     pred = s.test()

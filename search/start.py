@@ -17,7 +17,7 @@ INIT_ACTION = A.INIT_ACTIONS[0]
 
 
 class TaskSearch:
-    def __init__(self, task: RawTaskData, *, parent_logger: str) -> None:
+    def __init__(self, task: RawTaskData, parent_logger: str) -> None:
         self._parent_logger = parent_logger
         self.logger = logging.getLogger(parent_logger + ".search")
         self.load_testy = True  # ??
@@ -33,33 +33,32 @@ class TaskSearch:
         self.x_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
         self.y_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
 
-    def _get(self) -> tuple[float, str, str, frozenset]:
-        dist, x, y, exclude, include = self.q.get()
-        self.logger.debug("get node %s", (dist, x, y, exclude, include))
-        return dist, x, y, exclude, include
+    def _get(self) -> tuple[float, str, str, dict]:
+        dist, x, y, kwargs = self.q.get()
+        self.logger.debug("get node %s", (dist, x, y, kwargs))
+        return dist, x, y, dict(kwargs)
 
     def _put(
         self,
         xnodes: set[str],
         ynodes: set[str],
-        *,
-        exclude: frozenset[str],
-        include: frozenset[str],
         hard_dist: float | None = None,
+        **kwargs,
     ) -> None:
         if len(xnodes) > 0 and len(ynodes) > 0:
-            new_pairs = set(product(xnodes, ynodes, [exclude], [include]))
+            new_pairs = set(product(xnodes, ynodes, [frozenset(kwargs.items())]))
             new_pairs.discard(self.closed)
-            for xnode, ynode, *_ in new_pairs:
+            for xnode, ynode, kwarg in new_pairs:
                 xbags, ybags, *_ = self._get_bags(xnode, ynode)
                 d = hard_dist or dl(xbags, ybags)
+                # hardcode for fast testing
                 if (
                     xnode == "R(-1, 1) --> P( 0,-1)"
                     and ynode == "R(-1, 1) --> P( 0,-1)"
                 ):
                     d = -1
-                self.q.put((d, xnode, ynode, exclude, include))
-                self.logger.debug("put node %s", (d, xnode, ynode, exclude, include))
+                self.q.put((d, xnode, ynode, kwarg))
+                self.logger.debug("put node %s", (d, xnode, ynode, kwarg))
 
     def init(self) -> None:
         self._reset()
@@ -78,7 +77,7 @@ class TaskSearch:
             if self.load_testy
             else None,
         )
-        self._put({xnode}, {ynode}, exclude=frozenset(), include=frozenset())
+        self._put({xnode}, {ynode})
 
     def search_topdown(self) -> None:
         i = 0
@@ -91,21 +90,18 @@ class TaskSearch:
                 self.xdag.g.number_of_nodes(),
                 self.ydag.g.number_of_nodes(),
             )
-            _, xnode, ynode, exclude, include = self._get()
+            _, xnode, ynode, kwargs = self._get()
             tbag = TaskBags.from_tuples(
                 *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
             )
             if not (ans := self.ydag.get_solution(ynode)):
-                self.logger.info("Starting pipe, xnode=%s, ynode=%s", xnode, ynode)
-                ans = main_pipe(
-                    tbag,
-                    exclude=exclude,
-                    include=include,
-                    parent_logger=self._parent_logger,
+                self.logger.info(
+                    "starting pipe, xnode=%s, ynode=%s, kwargs=%s", xnode, ynode, kwargs
                 )
+                ans = main_pipe(tbag, parent_logger=self._parent_logger, **kwargs)
                 if ans:
                     self.ydag.set_solution(ynode, ans, tbag.collect_hashes())
-            self.closed.add((xnode, ynode, exclude, include))
+            self.closed.add((xnode, ynode, frozenset(kwargs.items())))
             if not ans:
                 self._expand(tbag, xnode, ynode)
                 continue
@@ -116,8 +112,8 @@ class TaskSearch:
 
             xparent = self.xdag.get_parent(xnode)
             yparent = self.ydag.get_parent(ynode)
-            new_exclude = frozenset(Region.content_props())
-            new_include = frozenset(Region.size_props())
+            exclude = frozenset(Region.content_props())
+            include = frozenset(Region.size_props())
             # if A.is_nobg_action(curr_act_y):
             # new_exclude.update({"width", "height"})
             # we can get width and height from successors
@@ -125,9 +121,9 @@ class TaskSearch:
             self._put(
                 {xparent},
                 {yparent},
-                exclude=new_exclude,
-                include=new_include,
                 hard_dist=-1,
+                exclude=exclude,
+                include=include,
             )
 
     def _add_nodes(
@@ -163,7 +159,7 @@ class TaskSearch:
         if len(new_xnodes | new_ynodes) > 0:
             xs_expand = new_xnodes or set(self.xdag.g.nodes)
             ys_expand = new_ynodes or set(self.ydag.g.nodes)
-            self._put(xs_expand, ys_expand, exclude=frozenset(), include=frozenset())
+            self._put(xs_expand, ys_expand)
 
     def _get_bags(
         self, xnode: str, ynode: str
@@ -173,6 +169,7 @@ class TaskSearch:
         return x, y, xtest, ytest
 
     def test(self) -> list[np.ndarray] | None:
+        # prototype, the most buggy and ugly place here
         if not self.success:
             return None
         path = list(self.ydag.get_solved_down(self.ydag.init_node))

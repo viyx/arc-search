@@ -12,8 +12,8 @@ from search.solvers.prolog.bg import BASE_BG
 SSD = Sequence[Sequence[dict]]
 
 
-# TODO remove double call of `predict`, remove Solver
-# TODO Cache prediction, cache transformations, move to sklearn api
+#   TODO remove double call of `predict`, remove Solver
+#   TODO Cache prediction, cache transformations, move to sklearn api
 class Pipeline(Solver):
     def __init__(
         self,
@@ -76,44 +76,28 @@ class Pipeline(Solver):
         return p
 
 
+#   TODO pass args from cmd, config??
 def main_pipe(
     task: TaskBags,
     *,
     parent_logger: str,
-    exclude: set[str] | None = None,
-    include: set[str] | None = None,
+    **kwargs: dict,
 ) -> SSD | None:
-    tf = TaskMetaFeatures(task, exclude=exclude, include=include)
-    if exclude or (tf.all_y_pixels and tf.all_x_pixels):
-        pipe_prim = Pipeline(
+    tf = TaskMetaFeatures(task, **kwargs)
+    if kwargs or (tf.all_y_pixels and tf.all_x_pixels):
+        solver1 = PrimitiveSolver(tf)
+        solver2 = AlephSWI(
             tf,
-            steps=[
-                Dictionarizer(exclude=exclude, include=include),
-                PrimitiveSolver(tf),
-            ],
+            bg=BASE_BG,
+            opt_neg_n=5000,
+            timeout=200,
             parent_logger=parent_logger,
         )
-        if pipe_prim.solve_validate(task.x, task.y, task.x_test):
-            return pipe_prim.predict(task.x_test)
+        steps1 = [Dictionarizer(**kwargs), solver1]
+        steps2 = [Dictionarizer(**kwargs), solver2]
 
-        pipe_prolog = Pipeline(
-            tf,
-            steps=[
-                Dictionarizer(exclude=exclude, include=include),
-                # ConstantsRemover(),
-                # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=0, timeout=30),
-                # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=100, timeout=30),
-                # AlephSwipl(tf, bg=BASE_BG, opt_neg_n=1000, timeout=60),
-                AlephSWI(
-                    tf,
-                    bg=BASE_BG,
-                    opt_neg_n=5000,
-                    timeout=200,
-                    parent_logger=parent_logger,
-                ),
-            ],
-            parent_logger=parent_logger,
-        )
-        if pipe_prolog.solve_validate(task.x, task.y, task.x_test):
-            return pipe_prolog.predict(task.x_test)
+        for steps in [steps1, steps2]:
+            pipe_prolog1 = Pipeline(tf, steps=steps, parent_logger=parent_logger)
+            if pipe_prolog1.solve_validate(task.x, task.y, task.x_test):
+                return pipe_prolog1.predict(task.x_test)
     return None

@@ -44,9 +44,11 @@ def make_mode(pred: str, h_or_b: str, args: list[str], n: int | None = None) -> 
     return f":- mode{h_or_b}({_n},{pred}({','.join(args)}))."
 
 
-def gen_facts(data: LLD, pred: str, args: list[str], *, start: int = 1) -> list[str]:
+def gen_facts(
+    data: LLD, pred: str, args: list[str], *, startfrom: int = 1
+) -> list[str]:
     res = []
-    for i, example in enumerate(data, start):
+    for i, example in enumerate(data, startfrom):
         for reg in example:
             vals = list(map(reg.get, args))
             res.append(compose_fact(pred, vals, i))
@@ -237,7 +239,7 @@ class AlephSWI(Solver):
             raise RuntimeError("The solver has no solution.")
 
         start = self._tf.len_x() + 1
-        self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs, start=start)
+        self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs, startfrom=start)
 
         with open(self._rules_file, "r", encoding="ascii") as frules:
             rules = frules.readlines()

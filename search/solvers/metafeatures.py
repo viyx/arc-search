@@ -5,24 +5,13 @@ from search import lgg
 
 
 class TaskMetaFeatures:
-    def __init__(
-        self,
-        task: TaskBags,
-        *,
-        exclude: set[str] | None = None,
-        include: set[str] | None = None
-    ) -> None:
-        # self.exclude = exclude
+    "Contains high-level features of a task."
+
+    def __init__(self, task: TaskBags, **kwargs) -> None:
         self.str_fields = Region.content_props()
-        # self.all_fields = Region.main_props()
         self._task = task
-        # self.x_lggs = [lgg.lgg_ext(b.dump_main_props()) for b in task.x]
-        self.ylggs = [
-            lgg.lgg_ext(b.dump_main_props(exclude=exclude, include=include))
-            for b in task.y
-        ]
+        self.ylggs = [lgg.lgg_ext(b.dump_main_props(**kwargs)) for b in task.y]
         self.ylgg = lgg.lgg_dict(self.ylggs)
-        # self.test_lggs = [lgg.lgg_ext(b.dump_main_props()) for b in task.x_test]
 
     @cached_property
     def all_y_consts(self) -> bool:
@@ -66,18 +55,6 @@ class TaskMetaFeatures:
             if y.unq_colors.isdisjoint(x.unq_colors) or y.unq_colors > x.unq_colors:
                 return False
         return True
-
-    # def all_y_in_x(self, field: str) -> bool:
-    #     for x, y in zip(self.x_lggs, self.y_lggs):
-    #         if set(y[field]) <= set(x[field]):
-    #             return False
-    #     return True
-
-    # def any_y_in_x(self, field: str) -> bool:
-    #     for x, y in zip(self.x_lggs, self.y_lggs):
-    #         if not set(y[field]).isdisjoint(set(x[field])):
-    #             return True
-    #     return False
 
     @cached_property
     def all_test_str_in_x(self) -> bool:

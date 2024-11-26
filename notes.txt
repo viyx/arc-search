@@ -1,4 +1,4 @@
 TODO
 
-Speed:
- - Aleph. Edit sat step to exclude permanent constraints
+ - Aleph. Edit sat step to exclude permanent constraints.
+ - Logging. Add common class with parent_logger in init.
