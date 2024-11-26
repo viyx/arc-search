@@ -1,4 +1,3 @@
-import logging
 import os
 import re
 import subprocess
@@ -73,14 +72,14 @@ def extract_max_rule(data: str) -> int | None:
 class AlephSWI(Solver):
     def __init__(
         self,
+        parent_logger: str,
         tf: TaskMetaFeatures,
         *,
         bg: list[str],
         opt_neg_n: int,
         timeout: int,
-        parent_logger: str,
     ):
-        super().__init__(tf)
+        super().__init__(parent_logger, tf)
         self.bg = bg
         self.opt_neg_n = opt_neg_n
         self._outp_args: list[Argument] = []
@@ -94,7 +93,6 @@ class AlephSWI(Solver):
         self.pos: list[str] = []
         self.neg: list[str] = []
         self.prolog_prog: str = ""
-        self.logger = logging.getLogger(parent_logger + ".aleph")
         self.timeout = timeout
 
         t = datetime.now().strftime("%H_%M_%S_%f")
@@ -238,7 +236,7 @@ class AlephSWI(Solver):
         if not self.success:
             raise RuntimeError("The solver has no solution.")
 
-        start = self._tf.len_x() + 1
+        start = self.tf.len_x() + 1
         self.test_facts = gen_facts(x, INP_PRED, self._inp_attrs, startfrom=start)
 
         with open(self._rules_file, "r", encoding="ascii") as frules:

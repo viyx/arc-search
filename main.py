@@ -2,55 +2,19 @@ import argparse
 import glob
 import logging
 import multiprocessing as mp
-import os
-from time import strftime
 
 import numpy as np
 
 from datasets.arc import ARCDataset, RawTaskData
+from log import config_logger
 from search.start import TaskSearch
-
-APP_LOGGER = "app"
-
-
-def config_logger(level: str, name: str) -> str:
-    logger_name = f"{APP_LOGGER}.{name}"
-    logger = logging.getLogger(logger_name)
-    logger.setLevel(level.upper())
-
-    console_handler = logging.StreamHandler()
-    day, secs = strftime("%m_%d_%Y"), strftime("%H_%M_%S")
-    fname = f"./logs/{day}/app_{name}_{secs}.log"
-
-    if not os.path.exists(os.path.dirname(fname)):
-        os.makedirs(os.path.dirname(fname))
-
-    file_handler = logging.FileHandler(fname, mode="a", encoding="utf-8")
-    file_formatter = logging.Formatter(
-        "[%(asctime)s.%(msecs)03d] [%(levelname)s] [%(name)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-
-    blue_color = "\033[34m"  # Blue color for brackets
-    reset_color = "\033[0m"  # Reset to default color
-    console_formatter = logging.Formatter(
-        f"{blue_color}[%(asctime)s.%(msecs)03d] "
-        f"[%(levelname)s] "
-        f"[%(name)s]{reset_color} %(message)s",
-        datefmt="%H:%M:%S",
-    )
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-    return logger_name
 
 
 def process_task(task: RawTaskData, task_name, log_level):
     lname = config_logger(log_level, task_name)
     logger = logging.getLogger(lname)
     logger.info("Start task %s", task_name)
-    ts = TaskSearch(task, parent_logger=lname)
+    ts = TaskSearch(lname, task)
     ts.init()
     ts.search_topdown()
     pred = ts.test()

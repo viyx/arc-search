@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Sequence
 from copy import copy
 
@@ -17,16 +16,14 @@ SSD = Sequence[Sequence[dict]]
 class Pipeline(Solver):
     def __init__(
         self,
+        parent_logger: str,
         tf: TaskMetaFeatures,
         *,
         steps: list[Transformer | Solver],
-        parent_logger: str,
     ):
-        super().__init__(tf)
+        super().__init__(parent_logger, tf)
         self.steps = steps
         self.success_step = None
-        self.logger = logging.getLogger(parent_logger + ".pipe")
-        self._parent_logger = parent_logger
 
     def solve(self, x, y):
         raise NotImplementedError()
@@ -78,26 +75,19 @@ class Pipeline(Solver):
 
 #   TODO pass args from cmd, config??
 def main_pipe(
-    task: TaskBags,
-    *,
     parent_logger: str,
+    task: TaskBags,
     **kwargs: dict,
 ) -> SSD | None:
     tf = TaskMetaFeatures(task, **kwargs)
     if kwargs or (tf.all_y_pixels and tf.all_x_pixels):
-        solver1 = PrimitiveSolver(tf)
-        solver2 = AlephSWI(
-            tf,
-            bg=BASE_BG,
-            opt_neg_n=5000,
-            timeout=200,
-            parent_logger=parent_logger,
-        )
-        steps1 = [Dictionarizer(**kwargs), solver1]
-        steps2 = [Dictionarizer(**kwargs), solver2]
+        solver1 = PrimitiveSolver(parent_logger, tf)
+        solver2 = AlephSWI(parent_logger, tf, bg=BASE_BG, opt_neg_n=5000, timeout=200)
+        steps1 = [Dictionarizer(parent_logger, **kwargs), solver1]
+        steps2 = [Dictionarizer(parent_logger, **kwargs), solver2]
 
         for steps in [steps1, steps2]:
-            pipe_prolog1 = Pipeline(tf, steps=steps, parent_logger=parent_logger)
+            pipe_prolog1 = Pipeline(parent_logger, tf, steps=steps)
             if pipe_prolog1.solve_validate(task.x, task.y, task.x_test):
                 return pipe_prolog1.predict(task.x_test)
     return None

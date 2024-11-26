@@ -1,9 +1,10 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Sequence
 from copy import copy
 from typing import TypeVar
 
 # import search.lgg as lgg
+from log import AppLogger
 from reprs.primitives import Bag, TaskBags
 from search import lgg
 from search.solvers.metafeatures import TaskMetaFeatures
@@ -38,10 +39,11 @@ SSD = Sequence[Sequence[dict]]
 TSSD = tuple[SSD, SSD]
 
 
-class Solver:
-    def __init__(self, tf: TaskMetaFeatures):  # remove at all??
+class Solver(AppLogger):
+    def __init__(self, parent_logger: str, tf: TaskMetaFeatures):
+        super().__init__(parent_logger=parent_logger)
         self.success = False
-        self._tf = tf
+        self.tf = tf
 
     @abstractmethod
     def solve(self, x: SSD, y: SSD) -> bool:
@@ -52,7 +54,7 @@ class Solver:
         pass
 
 
-class Transformer(ABC):
+class Transformer(AppLogger):
     @abstractmethod
     def fit_transform(self, x: SSA, y: SSA) -> TSSD:
         pass
@@ -68,8 +70,13 @@ class Transformer(ABC):
 
 class Dictionarizer(Transformer):
     def __init__(
-        self, *, exclude: set[str] | None = None, include: set[str] | None = None
+        self,
+        parent_logger: str,
+        *,
+        exclude: set[str] | None = None,
+        include: set[str] | None = None
     ):
+        super().__init__(parent_logger)
         self.exclude = exclude
         self.include = include
 
@@ -87,7 +94,8 @@ class Dictionarizer(Transformer):
 
 
 class ConstantsRemover(Transformer):
-    def __init__(self):
+    def __init__(self, parent_logger: str):
+        super().__init__(parent_logger)
         self.xconsts = {}
         self.yconsts = {}
 
@@ -124,28 +132,28 @@ class ConstantsRemover(Transformer):
 
 #   TODO split into 3 separate solvers
 class PrimitiveSolver(Solver):
-    def __init__(self, tf: TaskMetaFeatures):
+    def __init__(self, parent_logger: str, tf: TaskMetaFeatures):
+        super().__init__(parent_logger, tf)
         self.y_count: int | None = None
         self.y_vars: list[str] | None = None
         self.case1 = False
         self.case2 = False
         self.case3 = False
-        super().__init__(tf)
 
     def solve(self, x: SSD, y: SSD) -> bool:
-        if self._tf.all_y_consts and self._tf.all_xy_same_len:
+        if self.tf.all_y_consts and self.tf.all_xy_same_len:
             self.case1 = True
             self.success = True
             return True
-        if self._tf.all_y_consts and self._tf.all_y_const_len:
+        if self.tf.all_y_consts and self.tf.all_y_const_len:
             self.case2 = True
             self.y_count = len(y[0])
             self.success = True
             return True
-        if self._tf.all_xy_same_len:
+        if self.tf.all_xy_same_len:
             # one to one relation between xs' and ys' fields
             case3 = True
-            y_vars = [k for k, v in self._tf.ylgg.items() if v == lgg.VAR]
+            y_vars = [k for k, v in self.tf.ylgg.items() if v == lgg.VAR]
             for xi, yi in zip(x, y):
                 for _x, _y in zip(xi, yi):
                     for v in y_vars:
@@ -164,13 +172,13 @@ class PrimitiveSolver(Solver):
         if self.case1:
             res = []
             for xi in x:
-                res.append([copy(self._tf.ylgg) for _ in range(len(xi))])
+                res.append([copy(self.tf.ylgg) for _ in range(len(xi))])
             return res
         if self.case2:
             res = []
             for _ in x:
                 res_i = []
-                res_i.append([copy(self._tf.ylgg) for _ in range(self.y_count)])
+                res_i.append([copy(self.tf.ylgg) for _ in range(self.y_count)])
                 res.append(res_i)
             return res
         if self.case3:
@@ -178,7 +186,7 @@ class PrimitiveSolver(Solver):
             for xi in x:
                 res_i = []
                 for reg in xi:
-                    _y = copy(self._tf.ylgg)
+                    _y = copy(self.tf.ylgg)
                     for k in self.y_vars:
                         _y[k] = reg[k]
                     res_i.append(_y)

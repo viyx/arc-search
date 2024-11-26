@@ -1,4 +1,3 @@
-import logging
 from collections import defaultdict
 from collections.abc import Sequence
 from itertools import product
@@ -8,6 +7,7 @@ import numpy as np
 
 import search.actions as A
 from datasets.arc import RawTaskData
+from log import AppLogger
 from reprs.primitives import Bag, Region, TaskBags
 from search.distances import dl
 from search.graph import DAG
@@ -16,10 +16,9 @@ from search.solvers.pipeline import main_pipe
 INIT_ACTION = A.INIT_ACTIONS[0]
 
 
-class TaskSearch:
-    def __init__(self, task: RawTaskData, parent_logger: str) -> None:
-        self._parent_logger = parent_logger
-        self.logger = logging.getLogger(parent_logger + ".search")
+class TaskSearch(AppLogger):
+    def __init__(self, parent_logger: str, task: RawTaskData) -> None:
+        super().__init__(parent_logger)
         self.load_testy = True  # ??
         self.xdag = DAG(parent_logger=parent_logger)
         self.ydag = DAG(parent_logger=parent_logger)
@@ -98,7 +97,7 @@ class TaskSearch:
                 self.logger.info(
                     "starting pipe, xnode=%s, ynode=%s, kwargs=%s", xnode, ynode, kwargs
                 )
-                ans = main_pipe(tbag, parent_logger=self._parent_logger, **kwargs)
+                ans = main_pipe(self.parent_logger, tbag, **kwargs)
                 if ans:
                     self.ydag.set_solution(ynode, ans, tbag.collect_hashes())
             self.closed.add((xnode, ynode, frozenset(kwargs.items())))

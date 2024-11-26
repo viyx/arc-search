@@ -1,21 +1,20 @@
-import logging
 from typing import Any, Generator
 
 import networkx as nx
 from networkx import DiGraph
 
+from log import AppLogger
 from reprs.primitives import Bag
 from search.actions import Action
 
 # TODO
-# Add constants for nodes attributes
-# Add datatype for solutions
+# Add datatype/classes for solutions, nodes
 
 
-class DAG:
+class DAG(AppLogger):
     def __init__(self, parent_logger: str) -> None:
+        super().__init__(parent_logger)
         self.g = DiGraph()
-        self.logger = logging.getLogger(parent_logger + ".graph")
 
     def _filter_nodes_by(self, attr: str, value: Any) -> set[str]:
         attrs = self.g.nodes.data(attr)
