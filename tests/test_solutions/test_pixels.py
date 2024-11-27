@@ -3,7 +3,7 @@ import pytest
 
 from datasets.arc import ARCDataset
 from search.actions import Action, Extractors
-from search.start import TaskSearch
+from search.go import TaskSearch
 
 
 @pytest.mark.parametrize(
@@ -12,7 +12,7 @@ from search.start import TaskSearch
 def test(task):
     ds = ARCDataset(task_files=[task])
     action = Action(name=Extractors.EP, bg=0, c=-1)
-    s = TaskSearch(ds[0], parent_logger="")
+    s = TaskSearch("", ds[0])
     s.init()
     xs = s._add_nodes(
         s.xdag, {action}, s.xdag.init_node, *s.xdag.get_data(s.xdag.init_node)
@@ -28,8 +28,6 @@ def test(task):
     s._put(xs, ys, hard_dist=-1)
     s.search_topdown()
     assert s.success
-    pred = s.test()
-    res = []
-    for y, pred in zip(ds[0].test_y, pred):
-        res.append(np.all(y == pred))
-    assert all(res)
+    preds = s.test()
+    for y, pred in zip(ds[0].test_y, preds):
+        assert np.all(y == pred)

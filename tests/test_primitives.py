@@ -28,7 +28,7 @@ def test_region(raw1: np.ndarray, mask1: np.ndarray):
     r1 = Region(x=1, y=2, raw=raw1, mask=mask1)
     r2 = Region(x=2, y=2, raw=raw1, mask=mask1)
 
-    assert r1.color_hash != r1.mask_hash != hash(r1)
-    assert r1.color_hash == r2.color_hash
+    assert r1.visual_hash != r1.mask_hash != hash(r1)
+    assert r1.visual_hash == r2.visual_hash
     assert r1.mask_hash == r2.mask_hash
     assert hash(r1) != hash(r2)

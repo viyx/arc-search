@@ -5,3 +5,4 @@ rm arc-search.tar.gz
 tar -czf arc-search.tar.gz --directory temp .
 rm ~/Downloads/arc-search.tar.gz
 mv arc-search.tar.gz ~/Downloads
+rm -rf temp

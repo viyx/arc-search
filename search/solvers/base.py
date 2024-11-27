@@ -93,6 +93,7 @@ class Dictionarizer(Transformer):
         return xtest
 
 
+# constants are not deleted since there is no them in BK now
 class ConstantsRemover(Transformer):
     def __init__(self, parent_logger: str):
         super().__init__(parent_logger)
@@ -130,8 +131,11 @@ class ConstantsRemover(Transformer):
         return xcopy
 
 
-#   TODO split into 3 separate solvers
+# TODO. Split into 3 separate solvers
 class PrimitiveSolver(Solver):
+    """Provides the simpliest relations between x's and y's.
+    Namely: constant and one-to-one  relations and their combinations."""
+
     def __init__(self, parent_logger: str, tf: TaskMetaFeatures):
         super().__init__(parent_logger, tf)
         self.y_count: int | None = None
@@ -144,14 +148,15 @@ class PrimitiveSolver(Solver):
         if self.tf.all_y_consts and self.tf.all_xy_same_len:
             self.case1 = True
             self.success = True
+            self.logger.debug("y is constant and its number is 1to1 to x")
             return True
         if self.tf.all_y_consts and self.tf.all_y_const_len:
             self.case2 = True
             self.y_count = len(y[0])
             self.success = True
+            self.logger.debug("y is constant and its number is constant too")
             return True
         if self.tf.all_xy_same_len:
-            # one to one relation between xs' and ys' fields
             case3 = True
             y_vars = [k for k, v in self.tf.ylgg.items() if v == lgg.VAR]
             for xi, yi in zip(x, y):
@@ -164,6 +169,7 @@ class PrimitiveSolver(Solver):
                 self.y_vars = y_vars
                 self.case3 = True
                 self.success = True
+                self.logger.debug("one2one relation between xs' and ys' fields")
         return False
 
     def predict(self, x: SSD) -> SSD:
@@ -192,4 +198,4 @@ class PrimitiveSolver(Solver):
                     res_i.append(_y)
                 res.append(res_i)
             return res
-        raise RuntimeError("Inconsistent state of class.")
+        raise RuntimeError("Inconsistent state of the class.")

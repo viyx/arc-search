@@ -1,3 +1,8 @@
+"""Module contains `prolog` clauses which used as background knowledge.
+Also there are `python` signature descriptions of those clauses
+for easy creation of mode decalrations. Every `prolog` clause has to
+have respective `Predicate` description."""
+
 from enum import Enum
 
 from pydantic import BaseModel
@@ -29,6 +34,7 @@ class Predicate(BaseModel):
     args: list[Argument]
 
 
+# Prolog representations
 PLUS1FUNC = """plus1func(A,B):-
     integer(A),
     B is A + 1."""
@@ -72,6 +78,7 @@ BASE_BG = [
     MINUS3FUNC,
     LESSFUNC,
 ]
+
 
 BASE_BG_ARGS: dict[str, Predicate] = {
     PLUS1FUNC: Predicate(

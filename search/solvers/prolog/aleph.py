@@ -29,9 +29,10 @@ ALEPH_START = """:- use_module('../../aleph').
 :- aleph_set(verbosity,0).
 """
 
-# TODO Create specific Transformer for Aleph input. Add #eid to the ends of regions.
-# TODO Cancel answers with constant predicates outp(...) since they indicate failure.
+# aleph_set(minpos,2) is a strong restriction, it is supposed that tasks with
+# `one-input-one-output` solutions should be solved by `PrimitiveSolvers`.
 
+# TODO Create specific Transformer for Aleph input. Add #eid to the ends of regions.
 
 # Change these consts carefully, they are used in aleph_prune.pl
 INP_PRED = "inp"
@@ -70,6 +71,22 @@ def extract_max_rule(data: str) -> int | None:
 
 
 class AlephSWI(Solver):
+    """Class is supposed to work with `swipl` version of Aleph.
+    It automatically creates modes, determinations, positive and negative facts.
+
+    Main fields:
+    - `bg`: background knowledge
+    - `opt_neg_n`: number of optional negative examples.
+    - `inp_facts`: x's used as bk in aleph induction
+    - `test_facts`: x's for predict time
+    - `deters`: aleph determinations
+    - `modes`: aleph modes
+    - `pos`: y's used as aleph's positive examples
+    - `neg`: automically created aleph's negative examples
+    - `prolog_prog`: aleph one-file program for training
+
+    """
+
     def __init__(
         self,
         parent_logger: str,
@@ -175,6 +192,7 @@ class AlephSWI(Solver):
         )
 
     def compose_train(self, inputs: LLD, outputs: LLD) -> None:
+        "Compose training program."
         self._gen_data(inputs, outputs)
         nl = "\n"
         dnl = nl + nl
@@ -196,6 +214,8 @@ class AlephSWI(Solver):
 """
 
     def solve(self, x: SSD, y: SSD) -> bool:
+        """Run training program with `write_rules` directive and check the
+        rules if training succeeded."""
         self.logger.debug(
             "solve with `timeout`(=%s) and `opt_neg_n`(=%s)",
             self.timeout,
@@ -222,7 +242,7 @@ class AlephSWI(Solver):
             )
             return False
 
-        # simple running for checking errors and singletons
+        # simple run for checking errors and singletons
         self.logger.debug("error checking")
         _, stderr2 = self._run_swipl(self._rules_file, "halt", timeout=1)
         if stderr2:
@@ -232,7 +252,10 @@ class AlephSWI(Solver):
         self.success = True
         return True
 
+    # TODO. Check for variables in answer
     def predict(self, x) -> SSD:
+        """Basically run `setof` in `prolog` to collect test data.
+        Example: `:-setof((A,B,C,D),(outp(A,B,C,D),D>=4),L1),print(L1).`"""
         if not self.success:
             raise RuntimeError("The solver has no solution.")
 
@@ -258,6 +281,7 @@ class AlephSWI(Solver):
         self.logger.debug("predict")
         stdout, stderr = self._run_swipl(tfile.name, "halt", timeout=1)
         if not stderr and stdout:
+            # convert from prolog facts to dicts
             test_ans: list[tuple] = literal_eval(stdout)
             res = defaultdict(list)
             for t in test_ans:
@@ -274,6 +298,7 @@ class AlephSWI(Solver):
     def _run_swipl(
         self, fname: str, goal: str, *, timeout: int
     ) -> tuple[str | None, str | None]:
+        "Swipl process runner with synchronized `stdout`"
         process = None
         stdout_lines = []
         stderr_lines = []

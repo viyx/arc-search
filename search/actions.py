@@ -12,7 +12,7 @@ from reprs.extractors import (
     extract_prims,
     extract_regions,
 )
-from reprs.primitives import BG, NO_BG, Bag, Region
+from reprs.primitives import NO_BG, Bag, BGs, Region
 
 
 class Extractors(str, enum.Enum):
@@ -30,6 +30,8 @@ class Action(BaseModel):
         return {Extractors.EP: extract_prims, Extractors.ER: extract_regions}
 
     def __lt__(self, other: "Action") -> bool:
+        # We need order for readablility purposes.
+        # There is no functional meaning here.
         if self.name != other.name:
             return self.name < other.name
         if self.bg != other.bg:
@@ -64,12 +66,13 @@ def filter_actions_by_bg(actions: set[Action], bg: int) -> set[Action]:
 def _all_actions() -> set[Action]:
     a = set()
     for e in Extractors:
-        for b in BG:
+        for b in BGs:
             for c in CONNECTIVITY:
                 a.add(Action(name=e, bg=b, c=c))
     return a
 
 
+# these actions do nothing but put a full copy of input into one region
 INIT_ACTIONS = [
     Action(name=Extractors.ER, bg=NO_BG, c=FOUR_CONN),
     Action(name=Extractors.ER, bg=NO_BG, c=EIGHT_CONN),
@@ -79,8 +82,11 @@ INIT_ACTIONS = [
 def next_actions(
     bags: tuple[Bag], prev_actions: list[Action], *, determinate: bool
 ) -> set[Action]:
+    "Find possible actions. Prohibit voiding(remove all content) actions."
     det_acts = _all_actions()
-    # don't allow to apply second bg as it is irreversible operation
+    # a temporary restriction
+    # don't allow to apply second bg as it is irreversible operation and
+    # we won't be able to reconstruct order in which bgs were applied
     if determinate and any(a.bg != NO_BG for a in prev_actions):
         det_acts = filter_actions_by_bg(det_acts, NO_BG)
 
@@ -95,6 +101,7 @@ def next_actions(
 
 
 def void_color(r: Region) -> set[int]:
+    "Return color if it is the only for region."
     if r.is_one_colored:
         return {r.unq_colors[0]}
     return set()
@@ -102,6 +109,7 @@ def void_color(r: Region) -> set[int]:
 
 @lru_cache
 def next_actions_r(r: Region) -> set[Action]:
+    "Return useful actions which can be applied to region's content."
     to_pixel = Action(name=Extractors.ER, bg=NO_BG, c=NO_CONN)
     if r.is_one_colored:
         return {to_pixel}
@@ -109,7 +117,7 @@ def next_actions_r(r: Region) -> set[Action]:
         # give bugs if -1 is not supported in Region.raw_data
         # potentially split 8conn-primitive to a few 4conn-primitives;
         # temporary excluded as the action should already be in
-        # graph, as 4,8conn are always added together
+        # graph, as 4,8conn are always added together, see below
 
     for_many_colored = set()
     for color in r.unq_colors:
@@ -126,10 +134,11 @@ def next_actions_r(r: Region) -> set[Action]:
 
 
 @lru_cache
-def extract_flat(
+def extract_forall(
     action: Action, bags: tuple[Bag], *, hard_extract: bool = False
 ) -> tuple[Bag]:
-    "Extract bag for each region and merge."
+    """Apply the actions for each region in a bag.
+    Skip applying if the action is not possible."""
     new_bags = []
     for b in bags:
         _bags = []

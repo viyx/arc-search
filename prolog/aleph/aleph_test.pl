@@ -1,3 +1,24 @@
+%% example of aleph train file, from `./data/arc/training/dbc1a6ce.json`
+%% to run start in terminal: `swipl -f aleph_test.pl -g induce,halt`.
+
+% Answer:
+% [theory]
+
+% [Rule 1] [Pos cover = 37 Neg cover = 0]
+% outp(A,'-8339143352952803963',B,C) :-
+%    inp(A,B,C).
+
+% [Rule 2] [Pos cover = 24 Neg cover = 0]
+% outp(A,'5687070578108311489',B,C) :-
+%    inp(D,B,C), less(D,A), inp(E,B,C), less(A,E).
+
+% [Rule 3] [Pos cover = 45 Neg cover = 0]
+% outp(A,'5687070578108311489',B,C) :-
+%    inp(A,D,C), less(D,B), inp(A,E,C), less(B,E).
+
+%% Actually it provides wrong solution since in test data we have 3 pixels in one line,
+%% so one of them can be recolored by solution.
+
 :- use_module(aleph).
 :- aleph.
 :- [aleph_prune].
@@ -6,8 +27,8 @@
 :- aleph_set(clauselength,6).
 
 % input args order:['x', 'y']
-% oupt args order:['x', 'color_hash', 'y']
-:- modeh(*,outp(+nat,#color_hash,+nat,+ei)).
+% oupt args order:['x', 'visual_hash', 'y']
+:- modeh(*,outp(+nat,#visual_hash,+nat,+ei)).
 :- modeb(*,plus1func(+nat,-nat)).
 :- modeb(*,minus1func(+nat,-nat)).
 :- modeb(*,less(+nat,+nat)).
@@ -70,27 +91,7 @@ inp(4,5,4).
 inp(5,2,4).
 inp(5,7,4).
 inp(7,0,4).
-inp(0,7,5).
-% inp(0,10,5).
-% inp(0,14,5).
-% inp(1,2,5).
-% inp(2,10,5).
-% inp(3,19,5).
-% inp(4,9,5).
-% inp(5,1,5).
-% inp(6,6,5).
-% inp(7,1,5).
-% inp(8,10,5).
-% inp(9,11,5).
-% inp(10,13,5).
-% inp(12,9,5).
-% inp(14,6,5).
-% inp(14,14,5).
-% inp(16,1,5).
-% inp(18,1,5).
-% inp(18,3,5).
 :-end_bg.
-inp(0,10,5).inp(0,14,5).inp(1,2,5).inp(2,10,5).inp(3,19,5).inp(4,9,5).inp(5,1,5).inp(6,6,5).inp(7,1,5).inp(8,10,5).inp(9,11,5).inp(10,13,5).inp(12,9,5).inp(14,6,5).inp(14,14,5).inp(16,1,5).inp(18,1,5).inp(18,3,5).
 
 :-begin_in_pos.
 outp(0,'-8339143352952803963',3,1).

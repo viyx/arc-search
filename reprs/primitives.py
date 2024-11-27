@@ -5,11 +5,13 @@ from typing import Any, Hashable
 import numpy as np
 import pydantic
 
-NO_BG = -1
-BG = [NO_BG, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+NO_BG = -1  # value for empty space
+BGs = [NO_BG, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 class Region(pydantic.BaseModel, Hashable):
+    """Represent all types of figures."""
+
     x: int
     y: int
     raw: np.ndarray  # [0:10]
@@ -21,28 +23,31 @@ class Region(pydantic.BaseModel, Hashable):
 
     #  raw_view: np.ndarray
     #  mask_hash: str
-    #  color_hash: str
+    #  visual_hash: str
 
     @pydantic.computed_field
     @cached_property
-    def color_hash(self) -> str:
+    def visual_hash(self) -> str:
+        "This hash is position-invariant. It will be identical for the same figures."
         return str(hash(str(self.raw_view)))
 
     @pydantic.computed_field
     @cached_property
     def mask_hash(self) -> str:
+        "Shape of a figure."
         return str(hash(str(self.mask)))
 
-    @pydantic.computed_field  # ??
+    @pydantic.computed_field
     @cached_property
     def raw_view(self) -> np.ndarray:
+        "Data rendered in the background."
         _r = np.full_like(self.raw, NO_BG)
         _r[self.mask] = self.raw[self.mask]
         return _r
 
     @property
     def content_dicts(self) -> dict[str, np.ndarray]:
-        return {self.color_hash: self.raw_view, self.mask_hash: self.mask}
+        return {self.visual_hash: self.raw_view, self.mask_hash: self.mask}
 
     @cached_property
     def unq_colors(self) -> list[int]:
@@ -76,15 +81,15 @@ class Region(pydantic.BaseModel, Hashable):
 
     @classmethod
     def content_props(cls) -> set[str]:
-        return {"color_hash"}
+        return {"visual_hash"}
 
     @classmethod
-    def position_props(cls) -> set[str]:
-        return {"x", "y"}
+    def position_props(cls) -> list[str]:
+        return ["x", "y"]
 
     @classmethod
-    def size_props(cls) -> set[str]:
-        return {"width", "height"}
+    def size_props(cls) -> list[str]:
+        return ["width", "height"]
 
     def dump_main_props(
         self, *, exclude: set[str] | None = None, include: set[str] | None = None
@@ -99,7 +104,7 @@ class Region(pydantic.BaseModel, Hashable):
                     self.x,
                     self.y,
                     self.mask_hash,
-                    self.color_hash,
+                    self.visual_hash,
                 ]
             )
         )
@@ -143,8 +148,11 @@ class Region(pydantic.BaseModel, Hashable):
 
 
 class Bag(pydantic.BaseModel, Hashable):
+    "Container for regions."
+    # TODO: change to Set
     regions: Sequence[Region]
 
+    # interfaces
     # def __getitem__(self, i: int):
     #     return self.regions[i]
 
@@ -206,6 +214,7 @@ class Bag(pydantic.BaseModel, Hashable):
 
 
 class TaskBags(pydantic.BaseModel, Hashable):
+    "Container with useful features."
     x: Sequence[Bag]
     y: Sequence[Bag]
     x_test: Sequence[Bag]

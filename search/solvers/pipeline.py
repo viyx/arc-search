@@ -11,9 +11,13 @@ from search.solvers.prolog.bg import BASE_BG
 SSD = Sequence[Sequence[dict]]
 
 
-#   TODO remove double call of `predict`, remove Solver
-#   TODO Cache prediction, cache transformations, move to sklearn api
+# TODO. Cache prediction, cache transformations, move to sklearn api
 class Pipeline(Solver):
+    """Apply transformation and run solvers until succeeded. At prediction phase:
+    transform data and get solution from solver, then transform the solution back
+    (inverse trasform).
+    """
+
     def __init__(
         self,
         parent_logger: str,
@@ -31,7 +35,7 @@ class Pipeline(Solver):
     def solve_validate(self, x, y, xtest):
         _x, _y, _xtest = copy(x), copy(y), copy(xtest)
         self.logger.debug(
-            "Start solving and validation, with %s steps", len(self.steps)
+            "start solving and validation, with %s steps", len(self.steps)
         )
         for i, s in enumerate(self.steps):
             if isinstance(s, Transformer):
@@ -44,6 +48,7 @@ class Pipeline(Solver):
                         if validate_positions(_ytest):
                             self.success = True
                             self.success_step = i
+                            self.logger.debug("solved on step %s", i)
                             return True
                         raise RuntimeError("Validation failed.")
                 except RuntimeError as e:
@@ -52,7 +57,6 @@ class Pipeline(Solver):
                 except AttributeError as e:
                     self.logger.error("Error on step %s in solver %s: %s", i, s, e)
                     continue
-
         return False
 
     def predict(self, x):
@@ -73,13 +77,15 @@ class Pipeline(Solver):
         return p
 
 
-#   TODO pass args from cmd, config??
+# TODO. Pass args from cmd, config??
 def main_pipe(
     parent_logger: str,
     task: TaskBags,
     **kwargs: dict,
 ) -> SSD | None:
     tf = TaskMetaFeatures(task, **kwargs)
+    # temporary restriction
+    # run only for `pixel` representations
     if kwargs or (tf.all_y_pixels and tf.all_x_pixels):
         solver1 = PrimitiveSolver(parent_logger, tf)
         solver2 = AlephSWI(parent_logger, tf, bg=BASE_BG, opt_neg_n=5000, timeout=200)

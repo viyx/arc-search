@@ -12,6 +12,9 @@ from search.actions import Action
 
 
 class DAG(AppLogger):
+    """A tree-like dag with some checkings of internal state.
+    Mostly provides interface for data read/write operations."""
+
     def __init__(self, parent_logger: str) -> None:
         super().__init__(parent_logger)
         self.g = DiGraph()
@@ -20,7 +23,15 @@ class DAG(AppLogger):
         attrs = self.g.nodes.data(attr)
         return {k for k, v in attrs if v == value}
 
-    def _get_values_upstream(self, node: str, attr: str) -> list[Any]:
+    def _get_values_upstream(self, node: str, attr: str) -> Generator[Any, None, None]:
+        # while node:
+        #     yield self._get_data_by_attr(node, attr)
+        #     preds = list(self.g.predecessors(node))
+        #     if len(preds) > 1:
+        #         raise NotImplementedError("Found multiple parents for a node.")
+        #     node = preds[0] if preds else None
+
+        # TODO. Change recursion to Generator
         def _r(node: str, attr: str, res: list):
             res.append(self._get_data_by_attr(node, attr))
             preds = list(self.g.predecessors(node))
@@ -39,7 +50,7 @@ class DAG(AppLogger):
         while current_node:
             solved_children = solved_nodes & set(self.g.successors(current_node))
             if len(solved_children) > 1:
-                raise NotImplementedError("Multiple parents found for a node.")
+                raise NotImplementedError("Found multiple children with solutions.")
             current_node = solved_children.pop() if solved_children else None
             if current_node:
                 yield current_node
