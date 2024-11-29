@@ -30,8 +30,7 @@ class Action(BaseModel):
         return {Extractors.EP: extract_prims, Extractors.ER: extract_regions}
 
     def __lt__(self, other: "Action") -> bool:
-        # We need order for readablility purposes.
-        # There is no functional meaning here.
+        # We need order only for readablility purposes.
         if self.name != other.name:
             return self.name < other.name
         if self.bg != other.bg:
@@ -144,7 +143,7 @@ def extract_forall(
         _bags = []
         for r in b.regions:
             if not hard_extract and action not in next_actions_r(r):
-                # miss action
+                # skip action
                 rbag = Bag(regions=[r])
             else:
                 rbag = action(data=r.raw_view)

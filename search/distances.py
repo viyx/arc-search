@@ -2,6 +2,8 @@ from reprs.primitives import Bag
 
 
 def lgg_dist(lgg1: dict, lgg2: dict) -> float:
+    """The more different values btw lgg's the greater the distance.
+    Recursively evaluate complex fields."""
     n = 0
     m = 0
     for k in lgg1:
@@ -19,23 +21,24 @@ def pairwise_dists(l1: list[dict], l2: list[dict]) -> list:
     return [[lgg_dist(d1, d2) for d2 in l2] for d1 in l1]
 
 
-def dict_keys_dist(a: dict, b: dict, exclude: list[str] | None = None):
-    n = 0
-    m = 0
-    for k in a:
-        if exclude and k in exclude:
-            continue
-        n += 1
-        if k not in b:
-            continue
-        if isinstance(a[k], dict) and isinstance(b[k], dict):
-            m += 1 - dict_keys_dist(a[k], b[k])
-        else:
-            m += 1
-    return 1 - (m / n)
+# def dict_keys_dist(a: dict, b: dict, exclude: list[str] | None = None):
+#     n = 0
+#     m = 0
+#     for k in a:
+#         if exclude and k in exclude:
+#             continue
+#         n += 1
+#         if k not in b:
+#             continue
+#         if isinstance(a[k], dict) and isinstance(b[k], dict):
+#             m += 1 - dict_keys_dist(a[k], b[k])
+#         else:
+#             m += 1
+#     return 1 - (m / n)
 
 
 def dl(xbags: list[Bag], ybags: list[Bag]) -> int:
+    "Like a description length. Counts how many symbols different from x's are in y's."
     desc_len = 0
     y_symbols = set()
     for _x, _y in zip(xbags, ybags):

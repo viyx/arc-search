@@ -1,3 +1,4 @@
+# Compress code into tar archive
 rm -rf temp
 mkdir temp
 git clone git@github.com:viyx/arc-search.git -b main --single-branch temp

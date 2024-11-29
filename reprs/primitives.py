@@ -7,13 +7,15 @@ import pydantic
 
 NO_BG = -1  # value for empty space
 BGs = [NO_BG, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+COORD_MAX = 29
+COORD_MIN = 0
 
 
 class Region(pydantic.BaseModel, Hashable):
     """Represent all types of figures."""
 
-    x: int
-    y: int
+    x: int = pydantic.Field(0, ge=COORD_MIN, le=COORD_MAX)
+    y: int = pydantic.Field(0, ge=COORD_MIN, le=COORD_MAX)
     raw: np.ndarray  # [0:10]
     mask: np.ndarray  # [True, False]
 
@@ -122,6 +124,8 @@ class Region(pydantic.BaseModel, Hashable):
                 raise ValueError(f"Unsupported type {v.dtype}.")
             if NO_BG in np.unique(v):
                 raise ValueError(f"Content cannot have {NO_BG}.")
+            if v.ndim != 2 or v.shape[0] > COORD_MAX or v.shape[1] > COORD_MAX:
+                raise ValueError(f"Impossible shape {v.shape}.")
             return v
         raise ValueError(f"Unsupported type {type(v)}.")
 

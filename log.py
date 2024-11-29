@@ -2,11 +2,11 @@ import logging
 import os
 from time import strftime
 
-APP_LOGGER = "app"
+ROOT_LOGGER = "app"
 
 
 def config_logger(level: str, name: str) -> str:
-    logger_name = f"{APP_LOGGER}.{name}"
+    logger_name = f"{ROOT_LOGGER}.{name}"
     logger = logging.getLogger(logger_name)
     logger.setLevel(level.upper())
 

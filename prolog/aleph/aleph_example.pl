@@ -1,5 +1,5 @@
-%% example of aleph train file, from `./data/arc/training/dbc1a6ce.json`
-%% to run start in terminal: `swipl -f aleph_test.pl -g induce,halt`.
+%% example of aleph train file synthesized from task `./data/arc/training/dbc1a6ce.json`
+%% to run, start in terminal: `swipl -f aleph_test.pl -g induce,halt`.
 
 % Answer:
 % [theory]
@@ -16,8 +16,8 @@
 % outp(A,'5687070578108311489',B,C) :-
 %    inp(A,D,C), less(D,B), inp(A,E,C), less(B,E).
 
-%% Actually it provides wrong solution since in test data we have 3 pixels in one line,
-%% so one of them can be recolored by solution.
+%% Actually the above solution is wrong since in test data we have 3 pixels in one line,
+%% so one of them can be recolored by discovered theory.
 
 :- use_module(aleph).
 :- aleph.

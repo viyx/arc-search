@@ -78,12 +78,13 @@ class TaskSearch(AppLogger):
             for xnode, ynode, kwarg in new_pairs:
                 xbags, ybags, *_ = self._get_bags(xnode, ynode)
                 d = hard_dist or dl(xbags, ybags)
-                # hardcode for fast testing
-                if (
-                    xnode == "R(-1, 1) --> P( 0,-1)"
-                    and ynode == "R(-1, 1) --> P( 0,-1)"
-                ):
-                    d = -1
+                # uncomment the hardcode, to prioritize pixel representations
+                # with black bg
+                # if (
+                #     xnode == "R(-1, 1) --> P( 0,-1)"
+                #     and ynode == "R(-1, 1) --> P( 0,-1)"
+                # ):
+                #     d = -1
                 self.q.put((d, xnode, ynode, kwarg))
                 self.logger.debug("put node %s", (d, xnode, ynode, kwarg))
 
@@ -139,7 +140,7 @@ class TaskSearch(AppLogger):
                 continue
 
             # TODO. Need to recalcute all distances for solved ynode
-            # after solution was found, try to solve parent nodes
+            # after solution was found. Now try to solve parent nodes
             # using only size and positional features
             xparent = self.xdag.get_parent(xnode)
             yparent = self.ydag.get_parent(ynode)
@@ -220,13 +221,11 @@ class TaskSearch(AppLogger):
                 xs, ys = np.where(grids[i] == NO_BG)
                 grids[i][xs, ys] = a.bg
                 for reg in si:
-                    if cont_prop in reg:
-                        # put data from saved hash.
+                    if cont_prop in reg:  # put data from saved hash.
                         # new NO_BG's can appear here
                         cont: np.ndarray = hashes[reg[cont_prop]]
                         height, width = cont.shape
-                    else:
-                        # put rectangle filled with bg
+                    else:  # put rectangle filled with bg
                         width, height = (reg[p] for p in Region.size_props())
                         cont = np.full(shape=(height, width), fill_value=a.bg)
                     x, y = [reg[p] for p in Region.position_props()]

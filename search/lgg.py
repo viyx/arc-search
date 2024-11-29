@@ -5,6 +5,7 @@ VAR = "VAR"
 
 
 def lgg_dict(data: list[dict]) -> dict:
+    "Basically this is variabilization."
     first = data[0].copy()
     for d in data:
         for k in first:
@@ -15,6 +16,7 @@ def lgg_dict(data: list[dict]) -> dict:
 
 
 def lgg_ext(data: Iterable[dict]) -> dict:
+    "Like `lgg_dict`, but stores all distinct values instead of `VAR`s"
     res = defaultdict(list)
     for d in data:
         for k, v in d.items():
