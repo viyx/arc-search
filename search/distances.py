@@ -2,8 +2,8 @@ from reprs.primitives import Bag
 
 
 def lgg_dist(lgg1: dict, lgg2: dict) -> float:
-    """The more different values btw lgg's the greater the distance.
-    Recursively evaluate complex fields."""
+    """Like an edit distance. The more different values btw lgg's
+    the greater the distance. Evaluate complex fields recursively."""
     n = 0
     m = 0
     for k in lgg1:
@@ -37,20 +37,20 @@ def pairwise_dists(l1: list[dict], l2: list[dict]) -> list:
 #     return 1 - (m / n)
 
 
-def dl(xbags: list[Bag], ybags: list[Bag]) -> int:
-    "Like a description length. Counts how many symbols different from x's are in y's."
-    desc_len = 0
+def edit_light(xbags: list[Bag], ybags: list[Bag]) -> int:
+    "Like an edit-distance. Counts how many symbols different from x's are in y's."
+    edit_dist = 0
     y_symbols = set()
-    for _x, _y in zip(xbags, ybags):
-        xsymbols = _x.soup_of_props
-        for r in _y.regions:
+    for x, y in zip(xbags, ybags):
+        xsymbols = x.soup_of_props
+        for r in y.regions:
             if r.visual_hash in xsymbols:
                 continue
             if r.mask_hash in xsymbols:
-                desc_len += len(r.unq_colors)  # recolor
+                edit_dist += len(r.unq_colors)  # recolor
 
-        ysymbols = _y.soup_of_props
+        ysymbols = y.soup_of_props
         y_new_symbols = ysymbols - xsymbols - y_symbols
-        desc_len += len(y_new_symbols)
+        edit_dist += len(y_new_symbols)
         y_symbols |= y_new_symbols
-    return desc_len
+    return edit_dist

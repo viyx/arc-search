@@ -9,7 +9,7 @@ import search.actions as A
 from datasets.arc import RawTaskData
 from log import AppLogger
 from reprs.primitives import NO_BG, Bag, Region, TaskBags
-from search.distances import dl
+from search.distances import edit_light
 from search.graph import DAG
 from search.solvers.pipeline import main_pipe
 
@@ -77,9 +77,9 @@ class TaskSearch(AppLogger):
             new_pairs.discard(self.closed)
             for xnode, ynode, kwarg in new_pairs:
                 xbags, ybags, *_ = self._get_bags(xnode, ynode)
-                d = hard_dist or dl(xbags, ybags)
-                # uncomment the hardcode, to prioritize pixel representations
-                # with black bg
+                d = hard_dist or edit_light(xbags, ybags)
+                # uncomment the hardcode to prioritize pixel
+                # representations with black bg
                 # if (
                 #     xnode == "R(-1, 1) --> P( 0,-1)"
                 #     and ynode == "R(-1, 1) --> P( 0,-1)"
@@ -90,6 +90,7 @@ class TaskSearch(AppLogger):
 
     def init(self) -> None:
         "Add init action for each graph."
+        # TODO. Reset graph's content
         self._reset()
         make_dump_regions = INIT_ACTION
         xnode = self.xdag.try_add_node(
@@ -164,8 +165,8 @@ class TaskSearch(AppLogger):
     ) -> set[str]:
         newnodes = set()
         for a in sorted(actions):
-            new_bags = A.extract_forall(a, bags)
-            newtest_bags = A.extract_forall(a, test_bags) if test_bags else None
+            new_bags = A.apply_forall(a, bags)
+            newtest_bags = A.apply_forall(a, test_bags) if test_bags else None
             new_node = dag.try_add_node(a, parent, new_bags, newtest_bags)
             if new_node:
                 newnodes.add(new_node)

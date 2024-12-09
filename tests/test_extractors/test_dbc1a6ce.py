@@ -7,7 +7,7 @@ from datasets.arc import ARCDataset, RawTaskData
 from reprs.extractors import extract_prims, extract_regions
 from reprs.primitives import TaskBags
 from search.actions import Action, Extractors
-from search.actions import extract_forall as ef
+from search.actions import apply_forall as ef
 
 
 # task: 'connect dots with lines'

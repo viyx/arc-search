@@ -10359,7 +10359,7 @@ add_bottom(Bottom,M):-
 		M:example(Num,Type,Example),
 		retract(M:'$aleph_global'(hypothesis,hypothesis(_,_,_,_))),
 		setting(evalfn,Evalfn,M),
-		complete_label(Evalfn,Example,[1,0,1],Label1),
+		complete_label(Evalfn,Example,[1,0,1],Label1,M),
 		asserta(M:'$aleph_global'(hypothesis,hypothesis(Label1,(Example:-true),[Num-Num],[])))).
 
 	

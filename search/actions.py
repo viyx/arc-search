@@ -43,7 +43,7 @@ class Action(BaseModel):
         return partial(self.emap()[self.name], c=self.c, bg=self.bg)(*args, **kw)
 
     def __repr__(self) -> str:
-        #  Shorten and ajust representations to the form: `R( 1, 0)`
+        #  Shorten and adjust representations to the form: `R( 1, 0)`
         i = self.name.index("_")
         firstletter = self.name[i + 1]
         bg = " " + str(self.bg) if self.bg != NO_BG else str(self.bg)
@@ -71,7 +71,7 @@ def _all_actions() -> set[Action]:
     return a
 
 
-# these actions do nothing but put a full copy of input into one region
+# these actions do nothing but put a full copy of input into single region
 INIT_ACTIONS = [
     Action(name=Extractors.ER, bg=NO_BG, c=FOUR_CONN),
     Action(name=Extractors.ER, bg=NO_BG, c=EIGHT_CONN),
@@ -83,9 +83,9 @@ def next_actions(
 ) -> set[Action]:
     "Find possible actions. Prohibit voiding(remove all content) actions."
     det_acts = _all_actions()
-    # a temporary restriction
+    # temporary restriction
     # don't allow to apply second bg as it is irreversible operation and
-    # we won't be able to reconstruct order in which bgs were applied
+    # we won't be able to reconstruct order in which bg-s were applied
     if determinate and any(a.bg != NO_BG for a in prev_actions):
         det_acts = filter_actions_by_bg(det_acts, NO_BG)
 
@@ -133,7 +133,7 @@ def next_actions_r(r: Region) -> set[Action]:
 
 
 @lru_cache
-def extract_forall(
+def apply_forall(
     action: Action, bags: tuple[Bag], *, hard_extract: bool = False
 ) -> tuple[Bag]:
     """Apply the actions for each region in a bag.
