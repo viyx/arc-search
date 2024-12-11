@@ -37,7 +37,7 @@ def pairwise_dists(l1: list[dict], l2: list[dict]) -> list:
 #     return 1 - (m / n)
 
 
-def edit_light(xbags: list[Bag], ybags: list[Bag]) -> int:
+def edit_like(xbags: list[Bag], ybags: list[Bag]) -> int:
     "Like an edit-distance. Counts how many symbols different from x's are in y's."
     edit_dist = 0
     y_symbols = set()

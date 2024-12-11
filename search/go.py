@@ -9,8 +9,8 @@ import search.actions as A
 from datasets.arc import RawTaskData
 from log import AppLogger
 from reprs.primitives import NO_BG, Bag, Region, TaskBags
-from search.distances import edit_light
-from search.graph import DAG
+from search.distances import edit_like
+from search.graph import DAG, split_to_actions
 from search.solvers.pipeline import main_pipe
 
 INIT_ACTION = A.INIT_ACTIONS[0]
@@ -45,53 +45,33 @@ class TaskSearch(AppLogger):
     def __init__(self, parent_logger: str, task: RawTaskData) -> None:
         super().__init__(parent_logger)
         self.load_testy = True
-        self.xdag = DAG(parent_logger=parent_logger)
-        self.ydag = DAG(parent_logger=parent_logger)
         self.task = task
-        self.success = False
-        self._reset()
-
-    def _reset(self) -> None:
         self.success = False
         self.q = PriorityQueue()
         self.closed = set()
         self.x_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
         self.y_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
+        self.xdag = DAG(parent_logger=parent_logger)
+        self.ydag = DAG(parent_logger=parent_logger)
 
     def _get(self) -> tuple[float, str, str, dict]:
         dist, x, y, kwargs = self.q.get()
         self.logger.debug("get node %s", (dist, x, y, kwargs))
         return dist, x, y, dict(kwargs)
 
-    def _put(
-        self,
-        xnodes: set[str],
-        ynodes: set[str],
-        hard_dist: float | None = None,
-        **kwargs,
-    ) -> None:
-        """Put crossproduct of nodes into search queue.
-        Calculate distance value for each pair."""
-        if len(xnodes) > 0 and len(ynodes) > 0:
-            new_pairs = set(product(xnodes, ynodes, [frozenset(kwargs.items())]))
-            new_pairs.discard(self.closed)
-            for xnode, ynode, kwarg in new_pairs:
-                xbags, ybags, *_ = self._get_bags(xnode, ynode)
-                d = hard_dist or edit_light(xbags, ybags)
-                # uncomment the hardcode to prioritize pixel
-                # representations with black bg
-                # if (
-                #     xnode == "R(-1, 1) --> P( 0,-1)"
-                #     and ynode == "R(-1, 1) --> P( 0,-1)"
-                # ):
-                #     d = -1
-                self.q.put((d, xnode, ynode, kwarg))
-                self.logger.debug("put node %s", (d, xnode, ynode, kwarg))
+    def _put(self, xnode: str, ynode: str, dist: float | None = None, **kwargs) -> None:
+        if (xnode, ynode, frozenset(kwargs.items())) not in self.closed:
+            if dist is None:
+                xbags, _, ybags, _ = self._get_bags(xnode, ynode)
+                dist = edit_like(xbags, ybags)
+            search_node = (dist, xnode, ynode, frozenset(kwargs.items()))
+            self.q.put(search_node)
+            self.logger.debug("put node %s", search_node)
+        else:
+            self.logger.debug("skip adding a duplicate node %s", search_node)
 
-    def init(self) -> None:
+    def _init(self) -> tuple[str, str]:
         "Add init action for each graph."
-        # TODO. Reset graph's content
-        self._reset()
         make_dump_regions = INIT_ACTION
         xnode = self.xdag.try_add_node(
             make_dump_regions,
@@ -107,9 +87,81 @@ class TaskSearch(AppLogger):
             if self.load_testy
             else None,
         )
-        self._put({xnode}, {ynode})
+        return xnode, ynode
+
+    def _add_nodes(
+        self,
+        dag: DAG,
+        actions: set[A.Action],
+        parent: str,
+        bags: Sequence[Bag],
+        test_bags: Sequence[Bag] | None,
+    ) -> set[str]:
+        newnodes = set()
+        for a in sorted(actions):
+            new_bags = A.apply_forall(a, bags)
+            newtest_bags = A.apply_forall(a, test_bags) if test_bags else None
+            new_node = dag.try_add_node(a, parent, new_bags, newtest_bags)
+            if new_node:
+                newnodes.add(new_node)
+        return newnodes
+
+    # TODO. Check redundancy: can we get new actions after visiting a node?
+    def _expand(self, tbag: TaskBags, xnode: str, ynode: str) -> None:
+        """Find possible actions, apply these actions and add new nodes to the dags.
+        Then put new nodes in the search queue."""
+        xclos, yclos = self.x_closed_acts[xnode], self.y_closed_acts[ynode]
+        prev_acts_y = self.ydag.get_actions_upstream(ynode)
+        prev_acts_x = self.xdag.get_actions_upstream(xnode)
+
+        xnew_acts = A.next_actions(tbag.x, prev_acts_x, determinate=True) - xclos
+        ynew_acts = A.next_actions(tbag.y, prev_acts_y, determinate=True) - yclos
+
+        new_xnodes = self._add_nodes(self.xdag, xnew_acts, xnode, tbag.x, tbag.x_test)
+        new_ynodes = self._add_nodes(self.ydag, ynew_acts, ynode, tbag.y, tbag.y_test)
+
+        self.x_closed_acts[xnode].update(new_xnodes)
+        self.y_closed_acts[ynode].update(new_ynodes)
+        if len(new_xnodes | new_ynodes) > 0:
+            # put all nodes if there are no new ones
+            xs_expand = new_xnodes or set(self.xdag.g.nodes)
+            ys_expand = new_ynodes or set(self.ydag.g.nodes)
+            self.put_crossproduct(xs_expand, ys_expand)
+
+    def _get_bags(
+        self, xnode: str, ynode: str
+    ) -> tuple[tuple[Bag], tuple[Bag], tuple[Bag], tuple[Bag] | None]:
+        x, xtest = self.xdag.get_data(xnode)
+        y, ytest = self.ydag.get_data(ynode)
+        return x, xtest, y, ytest
+
+    def put_crossproduct(
+        self, xnodes: set[str], ynodes: set[str], dist: float | None = None, **kwargs
+    ) -> None:
+        if len(xnodes) > 0 and len(ynodes) > 0:
+            new_pairs = set(product(xnodes, ynodes, [frozenset(kwargs.items())]))
+            new_pairs.discard(self.closed)
+            for xnode, ynode, _ in new_pairs:
+                if dist is None:
+                    xbags, _, ybags, _ = self._get_bags(xnode, ynode)
+                    dist = edit_like(xbags, ybags)
+                self._put(xnode, ynode, dist, **kwargs)
+        else:
+            self.logger.debug("no nodes added")
+
+    def reset(self) -> None:
+        self.success = False
+        self.q = PriorityQueue()
+        self.closed = set()
+        self.x_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
+        self.y_closed_acts: dict[str, set[A.Action]] = defaultdict(set)
+        self.xdag = DAG(parent_logger=self.parent_logger)
+        self.ydag = DAG(parent_logger=self.parent_logger)
 
     def search_topdown(self) -> None:
+        if self.q.qsize() == 0:
+            xinit, yinit = self._init()
+            self._put(xinit, yinit)
         i = 0
         while self.q.qsize() != 0 and not self.success and i < 1000:
             i += 1
@@ -121,9 +173,7 @@ class TaskSearch(AppLogger):
                 self.ydag.g.number_of_nodes(),
             )
             _, xnode, ynode, kwargs = self._get()
-            tbag = TaskBags.from_tuples(
-                *self.xdag.get_data(xnode), *self.ydag.get_data(ynode)
-            )
+            tbag = TaskBags.from_tuples(*self._get_bags(xnode, ynode))
             if not (ans := self.ydag.get_solution(ynode)):
                 self.logger.info(
                     "starting pipe, xnode=%s, ynode=%s, kwargs=%s", xnode, ynode, kwargs
@@ -148,59 +198,14 @@ class TaskSearch(AppLogger):
             exclude = frozenset(Region.content_props())
             include = frozenset(Region.size_props())
             self._put(
-                {xparent},
-                {yparent},
-                hard_dist=-1,
+                xparent,
+                yparent,
+                dist=-1,
                 exclude=exclude,
                 include=include,
             )
 
-    def _add_nodes(
-        self,
-        dag: DAG,
-        actions: set[A.Action],
-        parent: str,
-        bags: Sequence[Bag],
-        test_bags: Sequence[Bag] | None,
-    ) -> set[str]:
-        newnodes = set()
-        for a in sorted(actions):
-            new_bags = A.apply_forall(a, bags)
-            newtest_bags = A.apply_forall(a, test_bags) if test_bags else None
-            new_node = dag.try_add_node(a, parent, new_bags, newtest_bags)
-            if new_node:
-                newnodes.add(new_node)
-        return newnodes
-
-    def _expand(self, tbag: TaskBags, xnode: str, ynode: str) -> None:
-        """Find possible actions, apply those actions and add new nodes into dags.
-        After that, put the new nodes into search queue."""
-        xclos, yclos = self.x_closed_acts[xnode], self.y_closed_acts[ynode]
-        prev_acts_y = self.ydag.get_actions_upstream(ynode)
-        prev_acts_x = self.xdag.get_actions_upstream(xnode)
-
-        xnew_acts = A.next_actions(tbag.x, prev_acts_x, determinate=True) - xclos
-        ynew_acts = A.next_actions(tbag.y, prev_acts_y, determinate=True) - yclos
-
-        new_xnodes = self._add_nodes(self.xdag, xnew_acts, xnode, tbag.x, tbag.x_test)
-        new_ynodes = self._add_nodes(self.ydag, ynew_acts, ynode, tbag.y, tbag.y_test)
-
-        self.x_closed_acts[xnode].update(new_xnodes)
-        self.y_closed_acts[ynode].update(new_ynodes)
-        if len(new_xnodes | new_ynodes) > 0:
-            # put all nodes if there are no new ones
-            xs_expand = new_xnodes or set(self.xdag.g.nodes)
-            ys_expand = new_ynodes or set(self.ydag.g.nodes)
-            self._put(xs_expand, ys_expand)
-
-    def _get_bags(
-        self, xnode: str, ynode: str
-    ) -> tuple[tuple[Bag], tuple[Bag], tuple[Bag], tuple[Bag] | None]:
-        x, xtest = self.xdag.get_data(xnode)
-        y, ytest = self.ydag.get_data(ynode)
-        return x, y, xtest, ytest
-
-    # prototype function, which can have bugs
+    # a prototype function that may have bugs
     def test(self) -> list[np.ndarray] | None:
         """Create empty 30x30 grids and fill them with solutions' content,
         iteratively deepening."""
@@ -237,3 +242,25 @@ class TaskSearch(AppLogger):
             xbound = min(np.where(grids[i][:, 0] == void_value)[0].tolist() or [maxl])
             grids[i] = grids[i][:xbound, :ybound]
         return grids
+
+    def add_priority_nodes(self, xnode: str, ynode: str) -> None:
+        # add the highest priority to the nodes
+        if not self.xdag.g.number_of_nodes() == self.xdag.g.number_of_nodes() == 0:
+            # temporary intergrity constaint
+            raise NotImplementedError("Can only add nodes manually in empty dags.")
+        xacts = list(map(A.Action.from_str, split_to_actions(xnode)))
+        yacts = list(map(A.Action.from_str, split_to_actions(ynode)))
+        if not xacts[0] == yacts[0] == INIT_ACTION:
+            raise NotImplementedError("Can only start from init action.")
+        xinit, yinit = self._init()
+        xacts_rest, yacts_rest = xacts[1:], yacts[1:]  # skip one action after `init``
+        groups = [(xinit, self.xdag, xacts_rest), (yinit, self.ydag, yacts_rest)]
+        for node, dag, acts in groups:
+            parent = node
+            for a in acts:
+                train, test = dag.get_data(parent)
+                new_nodes = self._add_nodes(dag, {a}, parent, train, test)
+                if not new_nodes:
+                    raise RuntimeError("Can't add node.")
+                parent = new_nodes.pop()
+        self._put(xnode, ynode, dist=-1)

@@ -16,8 +16,8 @@ from reprs.primitives import NO_BG, Bag, BGs, Region
 
 
 class Extractors(str, enum.Enum):
-    EP = "extract_prims"
-    ER = "extract_regions"
+    EP = "Prim"
+    ER = "Reg"
 
 
 class Action(BaseModel):
@@ -28,6 +28,16 @@ class Action(BaseModel):
     @classmethod
     def emap(cls) -> dict:
         return {Extractors.EP: extract_prims, Extractors.ER: extract_regions}
+
+    @classmethod
+    def from_str(cls, a: str) -> "Action":
+        """Example: convert from 'Reg(0 ,-1)' to
+        `Action(name='extract_regions', bg=0, c=-1)`"""
+        a = a.strip()
+        i1, i2 = a.index("("), a.index(")")
+        extr = a[:i1]
+        params = a[i1 + 1 : i2].split(",")
+        return Action(name=Extractors(extr), bg=int(params[0]), c=int(params[1]))
 
     def __lt__(self, other: "Action") -> bool:
         # We need order only for readablility purposes.
@@ -43,12 +53,10 @@ class Action(BaseModel):
         return partial(self.emap()[self.name], c=self.c, bg=self.bg)(*args, **kw)
 
     def __repr__(self) -> str:
-        #  Shorten and adjust representations to the form: `R( 1, 0)`
-        i = self.name.index("_")
-        firstletter = self.name[i + 1]
-        bg = " " + str(self.bg) if self.bg != NO_BG else str(self.bg)
-        c = " " + str(self.c) if self.c != NO_CONN else str(self.c)
-        return f"{firstletter.capitalize()}({bg},{c})"
+        #  Shorten and adjust representations to the form: `Reg( 1, 0)`
+        bg = " " + str(self.bg) if len(str(self.bg)) == 1 else str(self.bg)
+        c = " " + str(self.c) if len(str(self.c)) == 1 else str(self.c)
+        return f"{self.name}({bg},{c})"
 
     def __str__(self) -> str:
         return self.__repr__()

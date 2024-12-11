@@ -1,8 +1,8 @@
-import argparse
 import glob
 import logging
 import multiprocessing as mp
 import os
+from argparse import ArgumentParser
 
 import numpy as np
 
@@ -11,12 +11,14 @@ from log import config_logger
 from search.go import TaskSearch
 
 
-def process_task(task: RawTaskData, task_name, log_level):
-    lname = config_logger(log_level, task_name)
-    logger = logging.getLogger(lname)
+def process_task(task: RawTaskData, task_name, log_level, nodes: str | None):
+    log_name = config_logger(log_level, task_name)
+    logger = logging.getLogger(log_name)
     logger.info("start task %s", task_name)
-    ts = TaskSearch(lname, task)
-    ts.init()
+    ts = TaskSearch(log_name, task)
+    if nodes:
+        x, y = nodes.split("@")
+        ts.add_priority_nodes(x, y)
     ts.search_topdown()
     pred = ts.test()
     res = []
@@ -26,9 +28,8 @@ def process_task(task: RawTaskData, task_name, log_level):
     return res
 
 
-#  TODO. Add accuracy metric and referencies to solutions for fast access.
-def main():
-    parser = argparse.ArgumentParser()
+def parse() -> ArgumentParser:
+    parser = ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("-f", "--file", help="Load single file.")
     group.add_argument(
@@ -55,7 +56,19 @@ def main():
         default=1,
         help="Number of parallel processes to use",
     )
-    args = parser.parse_args()
+    # Example: "Reg(-1, 1) --> Prim( 0,-1)@Reg(-1, 1) --> Prim( 0,-1)".
+    parser.add_argument(
+        "-n",
+        "--nodes",
+        type=str,
+        help="Manually set the highest priority to nodes.",
+    )
+    return parser
+
+
+#  TODO. Add accuracy metric and referencies to solutions for fast access.
+def main():
+    args = parse().parse_args()
 
     lname = config_logger(args.log_level, "main")
     logger = logging.getLogger(lname)
@@ -71,7 +84,7 @@ def main():
         for i, name in enumerate(ds.task_names):
             try:
                 logger.info("running task %s without multiprocessing", name)
-                process_task(ds[i], name, args.log_level)
+                process_task(ds[i], name, args.log_level, args.nodes)
             except RuntimeError as e:
                 logger.error("task %s encountered an error: %s", name, e)
     else:
@@ -80,7 +93,7 @@ def main():
             for i, name in enumerate(ds.task_names):
                 # in multiprocessing regime add task name into logger name
                 result = pool.apply_async(
-                    process_task, args=(ds[i], name, args.log_level)
+                    process_task, args=(ds[i], name, args.log_level, args.nodes)
                 )
                 results.append((name, result))
 

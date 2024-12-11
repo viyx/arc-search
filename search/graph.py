@@ -7,10 +7,20 @@ from log import AppLogger
 from reprs.primitives import Bag
 from search.actions import Action
 
-# TODO
-# Add datatype/classes for solutions, nodes
+SPLITTER = "-->"
 
 
+def name_node(parent: str | None, node: str) -> str:
+    if parent:
+        return f"{parent} {SPLITTER} {node}"
+    return node
+
+
+def split_to_actions(name: str) -> list[str]:
+    return list(map(str.strip, name.split(SPLITTER)))
+
+
+# TODO. Replace exceptions with integrity contraints when adding a node
 class DAG(AppLogger):
     """A tree-like dag with some checkings of internal state.
     Mostly provides interface for data read/write operations."""
@@ -24,24 +34,12 @@ class DAG(AppLogger):
         return {k for k, v in attrs if v == value}
 
     def _get_values_upstream(self, node: str, attr: str) -> Generator[Any, None, None]:
-        # while node:
-        #     yield self._get_data_by_attr(node, attr)
-        #     preds = list(self.g.predecessors(node))
-        #     if len(preds) > 1:
-        #         raise NotImplementedError("Found multiple parents for a node.")
-        #     node = preds[0] if preds else None
-
-        # TODO. Change recursion to Generator
-        def _r(node: str, attr: str, res: list):
-            res.append(self._get_data_by_attr(node, attr))
+        while node:
+            yield self._get_data_by_attr(node, attr)
             preds = list(self.g.predecessors(node))
-            if preds:
-                if len(preds) > 1:
-                    raise NotImplementedError("Found multiple parents for a node.")
-                return _r(preds[0], attr, res)
-            return res
-
-        return _r(node, attr, [])
+            if len(preds) > 1:
+                raise NotImplementedError("Found multiple parents for a node.")
+            node = preds[0] if preds else None
 
     def get_solved_down(self, node: str) -> Generator[str, None, None]:
         solved_nodes = set(self.g.nodes) - self._filter_nodes_by("sol", None)
@@ -60,7 +58,7 @@ class DAG(AppLogger):
         return next(nx.topological_sort(self.g))
 
     def get_actions_upstream(self, node: str) -> list[Action]:
-        return self._get_values_upstream(node, "action")
+        return list(self._get_values_upstream(node, "action"))
 
     def get_parent(self, node: str) -> str | None:
         preds = list(self.g.predecessors(node))
@@ -79,15 +77,6 @@ class DAG(AppLogger):
     def get_solution(self, node: str) -> Any:
         return self._get_data_by_attr(node, "sol")
 
-    def can_add_node(self, content_hash: str) -> bool:
-        same_hash = self._filter_nodes_by("content_hash", content_hash)
-        if len(same_hash) > 0:
-            self.logger.debug("find duplicate hash %s", content_hash)
-            if len(same_hash) > 1:
-                raise KeyError(f"{len(same_hash)} nodes with the same content.")
-            return False
-        return True
-
     def set_solution(self, node: str, sol: Any, hashes: dict) -> None:
         prev_sol = self._get_data_by_attr(node, "sol")
         if prev_sol is not None:
@@ -105,24 +94,29 @@ class DAG(AppLogger):
         if any(b.is_empty() for b in bags) or (
             test_bags and any(b.is_empty() for b in test_bags)
         ):
+            self.logger.debug("cannot add empty bags")
             return None
-        if self.can_add_node(
-            content_hash := hash(str(hash(bags)) + str(hash(test_bags)))
-        ):
-            new_node = f"{parent} --> {action}" if parent else str(action)
-            self.g.add_node(
-                new_node,
-                data=bags,
-                test_data=test_bags,
-                content_hash=content_hash,
-                action=action,
-                sol=sol,
-            )
-            self.logger.debug("add node %s", new_node)
-            if parent:
-                self.g.add_edge(parent, new_node)
-            return new_node
-        return None
+
+        content_hash = hash(str(hash(bags)) + str(hash(test_bags)))
+        same_nodes = self._filter_nodes_by("content_hash", content_hash)
+        if len(same_nodes) > 0:
+            self.logger.debug("find duplicate hash %s", content_hash)
+            if len(same_nodes) > 1:
+                raise RuntimeError(f"{len(same_nodes)} nodes with the same content.")
+            return None
+        new_node = name_node(parent, str(action))
+        self.g.add_node(
+            new_node,
+            data=bags,
+            test_data=test_bags,
+            content_hash=content_hash,
+            action=action,
+            sol=sol,
+        )
+        self.logger.debug("add node %s", new_node)
+        if parent:
+            self.g.add_edge(parent, new_node)
+        return new_node
 
     def _get_data_by_attr(self, node: str, attr: str) -> Any:
         return self.g.nodes[node][attr]
