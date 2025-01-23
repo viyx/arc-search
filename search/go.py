@@ -9,8 +9,8 @@ import search.actions as A
 from datasets.arc import RawTaskData
 from log import AppLogger
 from reprs.primitives import NO_BG, Bag, Region, TaskBags
-from search.distances import edit_like
-from search.graph import DAG, split_to_actions
+from search.distances import ribl_max
+from search.graph import DAG, actions_to_name, split_to_actions
 from search.solvers.pipeline import main_pipe
 
 INIT_ACTION = A.INIT_ACTIONS[0]
@@ -29,17 +29,20 @@ class TaskSearch(AppLogger):
     - `x_closed_acts`: Actions which were already applyed to `xdag`'s representation.
     - `y_closed_acts`: Actions which were already applyed to `ydag`'s representation.
 
-    Key Features:
-    - Node Pairing: Pairs of nodes from `xdag` and `ydag` are added to a
-      priority queue, with priority determined by the symbolic distance between
-      their representations.
-    - Iterative Deepening: The search explores the DAGs in a top-down
-      manner, progressively deepening to lower levels of representations.
-    - Bidirectional Search: Searches both input (`xdag`) and output (`ydag`)
-      spaces simultaneously, attempting to synthesize a program that connects the two.
-    - Timeout Handling: The search is successful if it synthesizes a program
-      before the timeout is reached.
-    - Prioritize of parent nodes that have solutions for children.
+    Notes:
+    1. Node names in DAGs represent sequences of actions in textual format. Also,
+    each node stores input/output data after applying the specified action.
+    This makes it convenient to treat nodes in the DAG as part of an execution graph.
+    2. Node Pairing. Pairs of nodes from `xdag` and `ydag` are added to a
+    priority queue, with priority determined by the symbolic distance between
+    their representations.
+    3. Iterative Deepening. The search explores the DAGs in a top-down
+    manner, progressively deepening to lower levels of representations.
+    4. Bidirectional Search. Searches both input (`xdag`) and output (`ydag`)
+    spaces simultaneously, attempting to synthesize a program that connects the two.
+    5. Timeout Handling: The search is successful if it synthesizes a program
+    before the timeout is reached.
+    6. Prioritize to nodes that have solutions for child nodes.
     """
 
     def __init__(self, parent_logger: str, task: RawTaskData) -> None:
@@ -63,7 +66,7 @@ class TaskSearch(AppLogger):
         if (xnode, ynode, frozenset(kwargs.items())) not in self.closed:
             if dist is None:
                 xbags, _, ybags, _ = self._get_bags(xnode, ynode)
-                dist = edit_like(xbags, ybags)
+                dist = ribl_max(xbags, ybags)
             search_node = (dist, xnode, ynode, frozenset(kwargs.items()))
             self.q.put(search_node)
             self.logger.debug("put node %s", search_node)
@@ -106,7 +109,7 @@ class TaskSearch(AppLogger):
                 newnodes.add(new_node)
         return newnodes
 
-    # TODO. Check redundancy: can we get new actions after visiting a node?
+    # TODO. Check: can we theoretically get new actions after visiting a node?
     def _expand(self, tbag: TaskBags, xnode: str, ynode: str) -> None:
         """Find possible actions, apply these actions and add new nodes to the dags.
         Then put new nodes in the search queue."""
@@ -144,7 +147,7 @@ class TaskSearch(AppLogger):
             for xnode, ynode, _ in new_pairs:
                 if dist is None:
                     xbags, _, ybags, _ = self._get_bags(xnode, ynode)
-                    dist = edit_like(xbags, ybags)
+                    dist = ribl_max(xbags, ybags)
                 self._put(xnode, ynode, dist, **kwargs)
         else:
             self.logger.debug("no nodes added")
@@ -158,7 +161,7 @@ class TaskSearch(AppLogger):
         self.xdag = DAG(parent_logger=self.parent_logger)
         self.ydag = DAG(parent_logger=self.parent_logger)
 
-    def search_topdown(self) -> None:
+    def search_bi(self) -> None:
         if self.q.qsize() == 0:
             xinit, yinit = self._init()
             self._put(xinit, yinit)
@@ -166,7 +169,7 @@ class TaskSearch(AppLogger):
         while self.q.qsize() != 0 and not self.success and i < 1000:
             i += 1
             self.logger.info(
-                "step %s: size(q, x, y) = (%s, %s, %s)",
+                "iteration %s: size(q, xnodes, ynodes) = (%s, %s, %s)",
                 i,
                 self.q.qsize(),
                 self.xdag.g.number_of_nodes(),
@@ -181,12 +184,14 @@ class TaskSearch(AppLogger):
                 ans = main_pipe(self.parent_logger, tbag, **kwargs)
                 if ans:
                     self.ydag.set_solution(ynode, ans, tbag.collect_hashes())
+                    self.logger.info("find solution for node %s: %s", ynode, ans)
             self.closed.add((xnode, ynode, frozenset(kwargs.items())))
             if not ans:
                 self._expand(tbag, xnode, ynode)
                 continue
 
             if ynode == self.ydag.init_node:
+                self.logger.info("find full solution on iteration %s", i)
                 self.success = True
                 continue
 
@@ -207,8 +212,8 @@ class TaskSearch(AppLogger):
 
     # a prototype function that may have bugs
     def test(self) -> list[np.ndarray] | None:
-        """Create empty 30x30 grids and fill them with solutions' content,
-        iteratively deepening."""
+        """Create empty 30x30 grids and iteratively fill them with the
+        content from solutions."""
         if not self.success:
             return None
         # now it is assumed only one path is possible in the dag
@@ -243,15 +248,18 @@ class TaskSearch(AppLogger):
             grids[i] = grids[i][:xbound, :ybound]
         return grids
 
+    # TODO. Cancel `next_actions_r` check here
     def add_priority_nodes(self, xnode: str, ynode: str) -> None:
-        # add the highest priority to the nodes
+        """Add the highest priority to the nodes. Should be used before calling search.
+        Note: Node names are sequences of actions in textual format.
+        """
         if not self.xdag.g.number_of_nodes() == self.xdag.g.number_of_nodes() == 0:
             # temporary intergrity constaint
             raise NotImplementedError("Can only add nodes manually in empty dags.")
         xacts = list(map(A.Action.from_str, split_to_actions(xnode)))
         yacts = list(map(A.Action.from_str, split_to_actions(ynode)))
         if not xacts[0] == yacts[0] == INIT_ACTION:
-            raise NotImplementedError("Can only start from init action.")
+            raise RuntimeError("Can only start from init action.")
         xinit, yinit = self._init()
         xacts_rest, yacts_rest = xacts[1:], yacts[1:]  # skip one action after `init``
         groups = [(xinit, self.xdag, xacts_rest), (yinit, self.ydag, yacts_rest)]
@@ -263,4 +271,4 @@ class TaskSearch(AppLogger):
                 if not new_nodes:
                     raise RuntimeError("Can't add node.")
                 parent = new_nodes.pop()
-        self._put(xnode, ynode, dist=-1)
+        self._put(actions_to_name(xacts), actions_to_name(yacts), dist=-1)

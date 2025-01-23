@@ -6,9 +6,12 @@ from argparse import ArgumentParser
 
 import numpy as np
 
+import search.graph
 from datasets.arc import ARCDataset, RawTaskData
 from log import config_logger
 from search.go import TaskSearch
+
+SPLITTER = "@"
 
 
 def process_task(task: RawTaskData, task_name, log_level, nodes: str | None):
@@ -17,9 +20,9 @@ def process_task(task: RawTaskData, task_name, log_level, nodes: str | None):
     logger.info("start task %s", task_name)
     ts = TaskSearch(log_name, task)
     if nodes:
-        x, y = nodes.split("@")
+        x, y = nodes.split(SPLITTER)
         ts.add_priority_nodes(x, y)
-    ts.search_topdown()
+    ts.search_bi()
     pred = ts.test()
     res = []
     for y, pred in zip(task.test_y, pred):
@@ -56,12 +59,13 @@ def parse() -> ArgumentParser:
         default=1,
         help="Number of parallel processes to use",
     )
-    # Example: "Reg(-1, 1) --> Prim( 0,-1)@Reg(-1, 1) --> Prim( 0,-1)".
     parser.add_argument(
         "-n",
         "--nodes",
         type=str,
-        help="Manually set the highest priority to nodes.",
+        help=f"""Manually set the highest priority to nodes. Use {SPLITTER} between
+        nodes and {search.graph.SPLITTER} between actions.
+        Example: "Reg(-1, 1)>Prim( 0,-1)@Reg(-1, 1)>Prim( 0,-1)".""",
     )
     return parser
 

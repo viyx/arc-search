@@ -54,3 +54,15 @@ def edit_like(xbags: list[Bag], ybags: list[Bag]) -> int:
         edit_dist += len(y_new_symbols)
         y_symbols |= y_new_symbols
     return edit_dist
+
+
+def ribl_max(xbags: list[Bag], ybags: list[Bag]) -> int:
+    "Rough RIBL distance."
+    dists = []
+    for x, y in zip(xbags, ybags):
+        xsymbols = x.soup_of_props
+        ysymbols = y.soup_of_props
+        dist = len(ysymbols - xsymbols)
+        dist += abs(len(x.regions) - len(y.regions))
+        dists.append(dist)
+    return max(dists)

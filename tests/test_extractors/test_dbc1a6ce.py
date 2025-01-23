@@ -6,8 +6,7 @@ import pytest
 from datasets.arc import ARCDataset, RawTaskData
 from reprs.extractors import extract_prims, extract_regions
 from reprs.primitives import TaskBags
-from search.actions import Action, Extractors
-from search.actions import apply_forall as ef
+from search.actions import Action, Extractors, apply_forall
 
 
 # task: 'connect dots with lines'
@@ -75,7 +74,7 @@ def test_actions_redundancy(task: TaskBags, all_actions: set[Action]):
     for bags in task.to_list():
         s = set()
         for a in all_actions:
-            s.add(ef(a, bags))
+            s.add(apply_forall(a, bags))
         assert len(s) < len(all_actions)
 
 
@@ -91,7 +90,7 @@ def test_disconnected(task: TaskBags):
         # s = set()
         for a in [a1, a2, a3, a4]:
             # for b in bags:
-            new_bags = ef(a, bags, hard_extract=True)
+            new_bags = apply_forall(a, bags, hard_extract=True)
             for b in new_bags:
                 for r in b.regions:
                     assert r.mask.shape == (1, 1)
@@ -110,7 +109,7 @@ def test_bg(task: TaskBags):
     r01 = Action(name=Extractors.ER, bg=bg2, c=1)
     p02 = Action(name=Extractors.EP, bg=bg2, c=2)
     r02 = Action(name=Extractors.ER, bg=bg2, c=2)
-    efhard = partial(ef, hard_extract=True)
+    efhard = partial(apply_forall, hard_extract=True)
 
     # pixel regions equals primitives
     assert efhard(p01, wo_c2) == efhard(r01, wo_c2)

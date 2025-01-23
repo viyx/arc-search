@@ -7,12 +7,12 @@ from log import AppLogger
 from reprs.primitives import Bag
 from search.actions import Action
 
-SPLITTER = "-->"
+SPLITTER = ">"
 
 
 def name_node(parent: str | None, node: str) -> str:
     if parent:
-        return f"{parent} {SPLITTER} {node}"
+        return f"{parent}{SPLITTER}{node}"
     return node
 
 
@@ -20,10 +20,25 @@ def split_to_actions(name: str) -> list[str]:
     return list(map(str.strip, name.split(SPLITTER)))
 
 
+def actions_to_name(acts: list[Action]) -> str:
+    name = ""
+    parent = None
+    for a in acts:
+        name = name_node(parent, str(a))
+        parent = str(a)
+    return name
+
+
 # TODO. Replace exceptions with integrity contraints when adding a node
 class DAG(AppLogger):
     """A tree-like dag with some checkings of internal state.
-    Mostly provides interface for data read/write operations."""
+    Mostly provides interface for data read/write operations.
+
+    Note: Names of nodes are sequencies of actions in textual formats.
+    Example, `Reg(-1, 1)>Prim( 0,-1)` defines the sequence of actions:
+    1. extract_regions(bg=-1, connectivity=1)
+    2. extract_primitives(bg=0, connectivity=-1)
+    """
 
     def __init__(self, parent_logger: str) -> None:
         super().__init__(parent_logger)
@@ -46,10 +61,10 @@ class DAG(AppLogger):
         current_node = node
 
         while current_node:
-            solved_children = solved_nodes & set(self.g.successors(current_node))
-            if len(solved_children) > 1:
-                raise NotImplementedError("Found multiple children with solutions.")
-            current_node = solved_children.pop() if solved_children else None
+            solved_childs = solved_nodes & set(self.g.successors(current_node))
+            if len(solved_childs) > 1:
+                raise NotImplementedError("Found multiple childs with solutions.")
+            current_node = solved_childs.pop() if solved_childs else None
             if current_node:
                 yield current_node
 
@@ -68,7 +83,7 @@ class DAG(AppLogger):
             return None
         return preds[0]
 
-    def get_children(self, node: str) -> list[str]:
+    def get_childs(self, node: str) -> list[str]:
         return list(self.g.successors(node))
 
     def get_action(self, node: str) -> Action:

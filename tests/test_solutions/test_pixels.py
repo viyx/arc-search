@@ -1,3 +1,5 @@
+"""Test tasks for which `pixel` representation is enough."""
+
 import numpy as np
 import pytest
 
@@ -10,11 +12,11 @@ from search.go import TaskSearch
 )
 def test_wblack_bg(task):
     ds = ARCDataset(task_files=[task])
-    xnode = "Reg(-1, 1) --> Prim( 0,-1)"
+    xnode = "Reg(-1, 1)>Prim( 0,-1)"  # produce pixel representation
     ynode = xnode
     s = TaskSearch("", ds[0])
     s.add_priority_nodes(xnode, ynode)
-    s.search_topdown()
+    s.search_bi()
     assert s.success
     preds = s.test()
     for y, pred in zip(ds[0].test_y, preds):
