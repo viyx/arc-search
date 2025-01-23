@@ -26,19 +26,12 @@ However, before we start induction algorithm we need to convert raw data to obje
 <p><em>Figure 1. Task "Move pixels right". </em></p></div>
 <em>* Images of tasks are taken from site <a href="https://neoneye.github.io/arc/" style="font-size: 13px">https://neoneye.github.io/arc</a></em>
 
-<!-- and draw inspiration from non-monotonic reasoning [[1]](https://en.wikipedia.org/wiki/Non-monotonic_logic)[[2]](https://plato.stanford.edu/entries/logic-nonmonotonic/) -->
 So we have following desiredata:
 - develope top-down/bottom-up operators which extract appropriate objects iteratevly deepening/expanding
 - eveluate these representation with heuristics to choose the most promising
 - when representation was chosen, we can do fast induction/search of a theory/program
 - use only relevant background knowledge according to representations
-- 
 
-
-<!-- ### Motivational example -->
-
-<!-- 
-The answer for the task in natural language is "move blocks right according to rules: red by 3, yellow by 4, green by 5, blue by 2". To find this answer in formal language we need to extract only representations as 'pixels' from input and outputs, however we don't know this in advance as we can interpret figures in outputs as lines or other more complex figures. This problem of multiple representations is *ubiqitious in `arc` dataset.  -->
 
 Let's consider another [task](https://neoneye.github.io/arc/edit.html?dataset=ARC&task=00d62c1b) (Figure 2) which gives more intuition
 
