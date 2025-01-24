@@ -101,3 +101,9 @@ python main.py -p 8 -d ./data/arc/evaluation/
 - Research the `table/1` predicate for data access (see [example](https://github.com/friguzzi/aleph/blob/master/prolog/examples/weather.pl)).
 - Introduce neuro-symbolic methods.
 
+### These examples should work
+
+```bash
+python main.py -f ./data/arc/evaluation/f45f5ca7.json -l debug
+python main.py -f ./data/arc/training/4258a5f9.json -l info
+```
