@@ -25,7 +25,7 @@ output('red', X, Y) :-
 
 <p align="center"><em>Listing 1. Example of generated rules.</em></p>
 
-Howerve, before applying the induction algorithm, the raw data must first be converted into objects (e.g., `input` and `output` in *Listing 1*) and it is unknown how to transform data in advance. For example, in the task shown in Figure 1, if we apply *connectivity* we can extract *lines* from the input instead of individual *pixels*. So, if the induction process attempts to describe how to convert lines to pixels(lines in input, pixels in output), it can stack and failure. Thus, we require flexibility in the choice of representations.
+However, before applying the induction algorithm, the raw data must first be converted into objects (e.g., `input` and `output` in *Listing 1*), and it is unknown how to transform data in advance. For example, in the task shown in Figure 1, if we apply *connectivity*, we can extract *lines* from the input instead of individual *pixels*. So, if the induction process attempts to describe how to convert lines to pixels (lines in input, pixels in output), it can fail. Thus, we require flexibility in the choice of representations.
 
 <div align="center">
 <img src="./misc/images/move_pixels.png" alt="Task 'Move pixels right'" width="800" height="400"/>
@@ -55,21 +55,20 @@ The answers for this task can be expressed in natural language as:
 - "Fill holes in green figures with yellow color."
 - "Recolor all rectangular black figures to yellow."
 
-In this case, the 'pixel' representation from the previous task is no longer necessary. For the first answer, we only require green complex figures and need to check for holes. For the second answer, we only need black figures and assessing rectangularness. While a pixel-level answer is possible, it introduces redundant relationships that significantly increase the induction search space. E.g., for pixel representation: "If a pixel is part of a rectangular black figure, then recolor the pixel to green" and for object representation: "If a figure is rectangular, then recolor it to yellow". It is obvious that the second answer will be shorter in formal langauge.
+In this case, the 'pixel' representation from the previous task is no longer necessary. For the first answer, we only require green complex figures and need to check for holes. For the second answer, we only need black figures and assess rectangularness. While a pixel-level answer is possible, it introduces redundant relationships that significantly increase the induction search space. For example, for pixel representation: "If a pixel is part of a rectangular black figure, then recolor the pixel to green" and for object representation: "If a figure is rectangular, then recolor it to yellow." It is obvious that the second answer will be shorter in formal language.
 
-
-The most relevant papers tackling ARC-AGI challenge with **ILP** are:
+The most relevant papers tackling the ARC-AGI challenge with ILP are:
 1. Program Synthesis using Inductive Logic Programming for the Abstraction and Reasoning Corpus. [arXiv:2405.06399](https://arxiv.org/abs/2405.06399)
    - Implements novel ILP techniques tailored to ARC tasks, focusing on logical rule synthesis.
-   - Based on FOIL induction system.
+   - Based on the FOIL induction system.
 2. Relational decomposition for program synthesis. [arXiv:2408.12212](https://arxiv.org/abs/2408.12212)
    - Proposes methods for decomposing relational structures to improve program synthesis.
-   - Our method of decompostion in `Listing 1` inspared by this paper.
-   - Based on Popper [link](https://github.com/logic-and-learning-lab/Popper/)
+   - Our method of decomposition in `Listing 1` is inspired by this paper.
+   - Based on Popper [link](https://github.com/logic-and-learning-lab/Popper/).
 
 ## Algorithm
 
-The core algorithm focuses on extracting multiple representations of inputs and outputs in a top-down fashion to facilitate program induction. Representations are ranked by calculating symbolic distances between inputs and outputs, with the most promising representations selected for induction. These distances may include geometric, semantic, informational metrics to evaluate representation suitability (e.g RIBL, edit-distance, compression level, etc.). The induction process uses the [Aleph](https://www.cs.ox.ac.uk/activities/programinduction/Aleph/aleph.html) system written in `Prolog`, supplemented by primitive `Python` solvers capable of identifying one-to-one and constant relationships. Planned enhancements include integrating additional induction systems and neuro-symbolic methods.
+The core algorithm focuses on extracting multiple representations of inputs and outputs in a top-down fashion to facilitate program induction. Representations are ranked by calculating symbolic distances between inputs and outputs, with the most promising representations selected for induction. These distances may include geometric, semantic, or informational metrics to evaluate representation suitability (e.g., RIBL, edit-distance, compression level, etc.). The induction process uses the [Aleph](https://www.cs.ox.ac.uk/activities/programinduction/Aleph/aleph.html) system written in `Prolog`, supplemented by primitive `Python` solvers capable of identifying one-to-one and constant relationships. Planned enhancements include integrating additional induction systems and neuro-symbolic methods.
 
 ## Basic Usage
 
@@ -101,3 +100,4 @@ python main.py -p 8 -d ./data/arc/evaluation/
 - Replace `Python` validations with induction constraints wherever possible.
 - Research the `table/1` predicate for data access (see [example](https://github.com/friguzzi/aleph/blob/master/prolog/examples/weather.pl)).
 - Introduce neuro-symbolic methods.
+
