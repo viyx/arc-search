@@ -96,8 +96,14 @@ python main.py -d ./data/arc/evaluation/ ./data/arc/training/
 ```bash
 python main.py -p 8 -d ./data/arc/evaluation/
 ```
+### These Examples Should Work
 
-## TODO
+```bash
+python main.py -f ./data/arc/evaluation/f45f5ca7.json -l debug
+python main.py -f ./data/arc/training/4258a5f9.json -l info
+```
+
+This is just a prototype, so there is still a lot to be done(TODO):
 
 - Collect metrics for the full dataset.
 - Develop a robust distance function.
@@ -109,10 +115,5 @@ python main.py -p 8 -d ./data/arc/evaluation/
 - Research the `table/1` predicate for data access (see [example](https://github.com/friguzzi/aleph/blob/master/prolog/examples/weather.pl)).
 - Introduce neuro-symbolic methods.
 
-### These Examples Should Work
 
-```bash
-python main.py -f ./data/arc/evaluation/f45f5ca7.json -l debug
-python main.py -f ./data/arc/training/4258a5f9.json -l info
-```
 
