@@ -1,4 +1,4 @@
-# Multirepresentation Induction Solver
+# Multi Representation Inductive Solver
 
 ## Motivation
 
